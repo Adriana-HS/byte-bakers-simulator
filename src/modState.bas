@@ -96,3 +96,62 @@ Public Bus As TBus
 Public Stats As TStats
 Public Clock As Long                      ' clock cycles since the last reset
 Public ReplacePolicy As Integer           ' POLICY_FIFO or POLICY_LRU
+
+' =====================================================================
+' ResetMachine - puts the whole machine in its power-on state.
+'   * CPU registers, flags and temporaries = 0, PC = 0
+'   * RAM = 0, every cache line invalid, statistics and clock = 0
+'   * every page P = 0, every frame free, except
+'     page 15 (I/O) -> frame 7, present and pinned
+'   * every bus in High-Z
+' VMem is NOT cleared: it holds the loaded program (the loader clears it).
+' ReplacePolicy is NOT changed: it is the user's choice.
+' =====================================================================
+Public Sub ResetMachine()
+    Dim i As Integer
+    Dim emptyCPU As TCPU, emptyStats As TStats
+
+    CPU = emptyCPU
+    For i = 0 To RAM_SIZE - 1: RAM(i) = 0: Next i
+    ResetPageTableState
+    ResetCacheState
+    ResetBusState
+    Stats = emptyStats
+    Clock = 0
+End Sub
+
+' Every page absent and every frame free, then pin the I/O page.
+Private Sub ResetPageTableState()
+    Dim i As Integer, emptyPTE As TPageEntry
+    For i = 0 To NUM_VPAGES - 1: PageTable(i) = emptyPTE: Next i
+    For i = 0 To NUM_FRAMES - 1: FrameOwner(i) = -1: Next i
+
+    With PageTable(IO_VPAGE)
+        .Present = True
+        .PFN = IO_FRAME
+        .Pinned = True
+    End With
+    FrameOwner(IO_FRAME) = IO_VPAGE
+End Sub
+
+' Invalidate L1I, L1D and the 4 lines of L2.
+Private Sub ResetCacheState()
+    Dim i As Integer, emptyLine As TCacheLine
+    L1I = emptyLine
+    L1D = emptyLine
+    For i = 0 To L2_LINES - 1: L2(i) = emptyLine: Next i
+End Sub
+
+' No driver on any bus: every line in High-Z, control word and CLK at 0.
+Private Sub ResetBusState()
+    With Bus
+        .IntAddr = HIGH_Z
+        .ExtAddr = HIGH_Z
+        .AddrDriver = ""
+        .Data = HIGH_Z
+        .DataDriver = ""
+        .Ctrl = 0
+        .Clk = False
+        .Internal = False
+    End With
+End Sub
