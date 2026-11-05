@@ -109,9 +109,9 @@ Public ReplacePolicy As Integer           ' POLICY_FIFO or POLICY_LRU
 ' =====================================================================
 Public Sub ResetMachine()
     Dim i As Integer
-    Dim emptyCPU As TCPU, emptyStats As TStats
+    Dim emptyStats As TStats
 
-    CPU = emptyCPU
+    ResetCPU                                  ' modCPU (#4)
     For i = 0 To RAM_SIZE - 1: RAM(i) = 0: Next i
     ResetPageTableState
     ResetCacheState

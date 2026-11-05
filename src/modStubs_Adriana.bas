@@ -11,7 +11,6 @@ Attribute VB_Name = "modStubs_Adriana"
 Option Explicit
 
 ' --- modCPU (#4) ---
-Public Sub ResetCPU(): End Sub
 Public Function RegName(ByVal i As Integer) As String: RegName = Choose(i + 1, "AX", "BX", "CX", "DX"): End Function
 
 ' --- modBus (#6) ---
