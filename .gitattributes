@@ -1,0 +1,12 @@
+# Exported VBA modules and assembly programs keep Windows line endings
+*.bas text eol=crlf
+*.cls text eol=crlf
+*.frm text eol=crlf
+*.asm text eol=crlf
+
+# Binary files: never merge or diff as text
+*.xlsm binary
+*.frx  binary
+*.png  binary
+*.jpg  binary
+*.pdf  binary
