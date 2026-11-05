@@ -267,3 +267,130 @@ Private Function IsaCheck(ByVal what As String, ByVal passed As Boolean) As Inte
     Debug.Print IIf(passed, "  OK    ", "  FAIL  ") & what
     IsaCheck = IIf(passed, 0, 1)
 End Function
+
+' =====================================================================
+' ISA reference sheet
+' Built from the ISA table above, so it always matches what the CPU
+' executes. Cells only: no shapes, so the animation engine never
+' looks here.
+' =====================================================================
+Public Const ISA_HEADER_ROW As Long = 11      ' table header; instructions start below it
+Private Const ISA_COLS As Long = 9            ' columns B..J
+
+Public Sub BuildISASheet()
+    Dim ws As Worksheet, op As Integer, r As Long, ir As Long, lastRow As Long
+
+    Set ws = IsaSheet()
+    Application.ScreenUpdating = False
+    ws.Cells.Clear
+    ws.Cells.Font.Name = "Consolas"
+    ws.Cells.Font.Size = 10
+    ws.Columns("B:J").NumberFormat = "@"      ' keep "00101" and "0x05" as text
+
+    ' Title
+    With ws.Range("B2")
+        .Value = "Byte Bakers - Instruction Set Architecture"
+        .Font.Size = 14
+        .Font.Bold = True
+    End With
+    ws.Range("B3").Value = NUM_INSTRUCTIONS & " instructions, fixed 2-byte format. Registers: AX=0, BX=1, CX=2, DX=3."
+
+    ' Instruction format
+    ws.Range("B5").Value = "Instruction format"
+    ws.Range("B5").Font.Bold = True
+    IsaHeader ws.Range("B6:E6"), Array("Byte", "Bits 7-3", "Bits 2-1", "Bit 0")
+    ws.Range("B7:E7").Value = Array("Byte 0", "opcode (5 bits)", "reg (2 bits)", "A8 (1 bit)")
+    ws.Range("B8").Value = "Byte 1"
+    ws.Range("C8").Value = "operand (8 bits): immediate 0-255 | address low byte (A8 + operand = 9-bit address 0-511) | source register in bits 1-0"
+    IsaBorders ws.Range("B6:E8")
+
+    ' Instruction table
+    IsaHeader ws.Range("B" & ISA_HEADER_ROW).Resize(1, ISA_COLS), _
+        Array("Opcode", "Binary", "Mnemonic", "Syntax", "Format", "Flags", "Description", "Example", "Machine code")
+    r = ISA_HEADER_ROW
+    For op = 0 To OPCODE_MAX
+        If IsValidOpcode(op) Then
+            r = r + 1
+            ir = Encode(op, R_AX, SampleOperand(OpFormat(op)))
+            ws.Cells(r, 2).Resize(1, ISA_COLS).Value = Array( _
+                "0x" & Right$("0" & Hex$(op), 2), _
+                Right$("0000" & IsaBin(op), 5), _
+                Mnemonic(op), _
+                OpSyntax(op), _
+                IIf(OpFormat(op) = "", "none", OpFormat(op)), _
+                OpFlags(op), _
+                OpDescription(op), _
+                Disassemble(ir), _
+                "0x" & Right$("000" & Hex$(ir), 4))
+        End If
+    Next op
+    lastRow = r
+    IsaBorders ws.Range("B" & ISA_HEADER_ROW).Resize(lastRow - ISA_HEADER_ROW + 1, ISA_COLS)
+
+    ' Format legend
+    r = r + 2
+    ws.Cells(r, 2).Value = "Operand formats"
+    ws.Cells(r, 2).Font.Bold = True
+    ws.Cells(r + 1, 2).Value = "R = register   RR = reg, reg   RI = reg, immediate   RM = reg, [address]   MR = [address], reg"
+    ws.Cells(r + 2, 2).Value = "A = address   RK = reg, [KBD]   LR = [LCD], reg   Flags: Z = ZF, C = CF, S = SF, - = unchanged"
+
+    ws.Columns("A").ColumnWidth = 2
+    ws.Range("B6:J" & lastRow).Columns.AutoFit   ' fit to the tables, not to the title
+    ws.Columns("C").ColumnWidth = 16           ' the long format line in C8 overflows to the right
+    Application.ScreenUpdating = True
+End Sub
+
+' Row of an opcode in the ISA table (0 if the opcode is not used).
+' The CPU panel (#9) uses it to highlight the instruction being executed.
+Public Function ISARow(ByVal op As Integer) As Long
+    Dim i As Integer, n As Long
+    If op < 0 Or op > OPCODE_MAX Then Exit Function
+    If Not IsValidOpcode(op) Then Exit Function
+    For i = 0 To op
+        If IsValidOpcode(i) Then n = n + 1
+    Next i
+    ISARow = ISA_HEADER_ROW + n
+End Function
+
+' Returns the ISA sheet, creating it at the end if the workbook has none.
+Private Function IsaSheet() As Worksheet
+    On Error Resume Next
+    Set IsaSheet = ThisWorkbook.Worksheets(SH_ISA)
+    On Error GoTo 0
+    If IsaSheet Is Nothing Then
+        Set IsaSheet = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count))
+        IsaSheet.Name = SH_ISA
+    End If
+End Function
+
+' Operand used for the example column of each format.
+Private Function SampleOperand(ByVal fmt As String) As Integer
+    Select Case fmt
+        Case "RR": SampleOperand = R_BX
+        Case "RI": SampleOperand = 10
+        Case "RM", "MR", "A": SampleOperand = &H40
+        Case Else: SampleOperand = 0
+    End Select
+End Function
+
+Private Function IsaBin(ByVal v As Integer) As String
+    Do
+        IsaBin = CStr(v Mod 2) & IsaBin
+        v = v \ 2
+    Loop While v > 0
+End Function
+
+Private Sub IsaHeader(ByVal rng As Range, ByVal titles As Variant)
+    rng.Value = titles
+    rng.Font.Bold = True
+    rng.Font.Color = CLR_TEXT
+    rng.Interior.Color = CLR_BG
+End Sub
+
+Private Sub IsaBorders(ByVal rng As Range)
+    With rng.Borders
+        .LineStyle = xlContinuous
+        .Weight = xlThin
+        .Color = CLR_HIGHZ
+    End With
+End Sub
