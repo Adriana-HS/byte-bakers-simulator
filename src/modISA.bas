@@ -71,3 +71,139 @@ Public Sub Decode(ByVal ir As Long, ByRef op As Integer, ByRef reg As Integer, B
     reg = (b0 \ 2) And 3
     operand = (b0 And 1) * 256 + (ir And BYTE_MAX)
 End Sub
+
+' =====================================================================
+' ISA table - the single source of truth for every instruction.
+' Mnemonic, OpcodeInfo, Disassemble and the ISA sheet all read it,
+' so the assembler, the CPU and the documentation can never disagree.
+'
+' Operand formats:
+'   ""  no operands        "R"  register           "RR" reg, reg
+'   "RI" reg, immediate    "RM" reg, [address]     "MR" [address], reg
+'   "A"  address           "RK" reg, [KBD]         "LR" [LCD], reg
+' Flags: Z = ZF, C = CF, S = SF ("-" = flags not changed)
+' Returns False if the opcode is not used.
+' =====================================================================
+Private Function OpInfo(ByVal op As Integer, ByRef mn As String, ByRef fmt As String, _
+                        ByRef syntax As String, ByRef flags As String, ByRef desc As String) As Boolean
+    OpInfo = True
+    Select Case op
+        Case OP_NOP:    mn = "NOP":   fmt = "":   syntax = "NOP":             flags = "-":     desc = "Does nothing"
+        Case OP_MOV_RI: mn = "MOV":   fmt = "RI": syntax = "MOV r, imm":      flags = "-":     desc = "r <- imm"
+        Case OP_MOV_RR: mn = "MOV":   fmt = "RR": syntax = "MOV r, r2":       flags = "-":     desc = "r <- r2"
+        Case OP_LOAD:   mn = "LOAD":  fmt = "RM": syntax = "LOAD r, [addr]":  flags = "-":     desc = "r <- M[addr]"
+        Case OP_STORE:  mn = "STORE": fmt = "MR": syntax = "STORE [addr], r": flags = "-":     desc = "M[addr] <- r"
+        Case OP_ADD_RR: mn = "ADD":   fmt = "RR": syntax = "ADD r, r2":       flags = "Z C S": desc = "r <- r + r2"
+        Case OP_ADD_RI: mn = "ADD":   fmt = "RI": syntax = "ADD r, imm":      flags = "Z C S": desc = "r <- r + imm"
+        Case OP_SUB_RR: mn = "SUB":   fmt = "RR": syntax = "SUB r, r2":       flags = "Z C S": desc = "r <- r - r2"
+        Case OP_SUB_RI: mn = "SUB":   fmt = "RI": syntax = "SUB r, imm":      flags = "Z C S": desc = "r <- r - imm"
+        Case OP_INC:    mn = "INC":   fmt = "R":  syntax = "INC r":           flags = "Z S":   desc = "r <- r + 1"
+        Case OP_DEC:    mn = "DEC":   fmt = "R":  syntax = "DEC r":           flags = "Z S":   desc = "r <- r - 1"
+        Case OP_CMP_RR: mn = "CMP":   fmt = "RR": syntax = "CMP r, r2":       flags = "Z C S": desc = "r - r2 (flags only)"
+        Case OP_CMP_RI: mn = "CMP":   fmt = "RI": syntax = "CMP r, imm":      flags = "Z C S": desc = "r - imm (flags only)"
+        Case OP_AND:    mn = "AND":   fmt = "RR": syntax = "AND r, r2":       flags = "Z S":   desc = "r <- r AND r2"
+        Case OP_OR:     mn = "OR":    fmt = "RR": syntax = "OR r, r2":        flags = "Z S":   desc = "r <- r OR r2"
+        Case OP_XOR:    mn = "XOR":   fmt = "RR": syntax = "XOR r, r2":       flags = "Z S":   desc = "r <- r XOR r2"
+        Case OP_JMP:    mn = "JMP":   fmt = "A":  syntax = "JMP addr":        flags = "-":     desc = "PC <- addr"
+        Case OP_JZ:     mn = "JZ":    fmt = "A":  syntax = "JZ addr":         flags = "-":     desc = "If ZF = 1: PC <- addr"
+        Case OP_JNZ:    mn = "JNZ":   fmt = "A":  syntax = "JNZ addr":        flags = "-":     desc = "If ZF = 0: PC <- addr"
+        Case OP_JC:     mn = "JC":    fmt = "A":  syntax = "JC addr":         flags = "-":     desc = "If CF = 1: PC <- addr"
+        Case OP_JS:     mn = "JS":    fmt = "A":  syntax = "JS addr":         flags = "-":     desc = "If SF = 1: PC <- addr"
+        Case OP_IN:     mn = "IN":    fmt = "RK": syntax = "IN r, [KBD]":     flags = "-":     desc = "r <- keyboard queue head (0 if empty)"
+        Case OP_OUT:    mn = "OUT":   fmt = "LR": syntax = "OUT [LCD], r":    flags = "-":     desc = "LCD[cursor] <- r; cursor advances"
+        Case OP_HLT:    mn = "HLT":   fmt = "":   syntax = "HLT":             flags = "-":     desc = "Halts the CPU"
+        Case Else:      mn = "":      fmt = "":   syntax = "":                flags = "":      desc = "": OpInfo = False
+    End Select
+End Function
+
+' True if the opcode belongs to the ISA.
+Public Function IsValidOpcode(ByVal op As Integer) As Boolean
+    Dim mn As String, fmt As String, syn As String, fl As String, ds As String
+    IsValidOpcode = OpInfo(op, mn, fmt, syn, fl, ds)
+End Function
+
+' Text shown on the panel: "ADD", "JNZ"... ("???" if the opcode is not used).
+Public Function Mnemonic(ByVal op As Integer) As String
+    Dim mn As String, fmt As String, syn As String, fl As String, ds As String
+    If OpInfo(op, mn, fmt, syn, fl, ds) Then Mnemonic = mn Else Mnemonic = "???"
+End Function
+
+' Operand format code of an opcode ("RR", "RI", "A"...).
+Public Function OpFormat(ByVal op As Integer) As String
+    Dim mn As String, fmt As String, syn As String, fl As String, ds As String
+    OpInfo op, mn, fmt, syn, fl, ds
+    OpFormat = fmt
+End Function
+
+' Syntax with generic operands: "ADD r, r2".
+Public Function OpSyntax(ByVal op As Integer) As String
+    Dim mn As String, fmt As String, syn As String, fl As String, ds As String
+    OpInfo op, mn, fmt, syn, fl, ds
+    OpSyntax = syn
+End Function
+
+' Flags the instruction updates: "Z C S", "Z S" or "-".
+Public Function OpFlags(ByVal op As Integer) As String
+    Dim mn As String, fmt As String, syn As String, fl As String, ds As String
+    OpInfo op, mn, fmt, syn, fl, ds
+    OpFlags = fl
+End Function
+
+' Register transfer description: "r <- r + r2".
+Public Function OpDescription(ByVal op As Integer) As String
+    Dim mn As String, fmt As String, syn As String, fl As String, ds As String
+    OpInfo op, mn, fmt, syn, fl, ds
+    OpDescription = ds
+End Function
+
+' =====================================================================
+' OpcodeInfo - used by the assembler (#27): mnemonic + operand format
+' -> opcode. Example: OpcodeInfo("ADD", "RR") = &H05.
+' Returns -1 if that combination does not exist.
+' =====================================================================
+Public Function OpcodeInfo(ByVal mn As String, ByVal fmt As String) As Integer
+    Dim op As Integer
+    mn = UCase$(Trim$(mn))
+    fmt = UCase$(Trim$(fmt))
+    For op = 0 To OPCODE_MAX
+        If IsValidOpcode(op) Then
+            If Mnemonic(op) = mn And OpFormat(op) = fmt Then
+                OpcodeInfo = op
+                Exit Function
+            End If
+        End If
+    Next op
+    OpcodeInfo = -1
+End Function
+
+' =====================================================================
+' Disassemble - IR (16 bits) -> readable text, e.g. "ADD AX, BX",
+' "LOAD CX, [0x1FF]", "OUT [LCD], AX". Used by the panel and the Log.
+' =====================================================================
+Public Function Disassemble(ByVal ir As Long) As String
+    Dim op As Integer, reg As Integer, operand As Integer
+    Dim mn As String, r As String
+    Decode ir, op, reg, operand
+    If Not IsValidOpcode(op) Then
+        Disassemble = "??? (0x" & Right$("0000" & Hex$(ir), 4) & ")"
+        Exit Function
+    End If
+    mn = Mnemonic(op)
+    r = RegName(reg)
+    Select Case OpFormat(op)
+        Case "":   Disassemble = mn
+        Case "R":  Disassemble = mn & " " & r
+        Case "RR": Disassemble = mn & " " & r & ", " & RegName(operand And 3)
+        Case "RI": Disassemble = mn & " " & r & ", " & operand
+        Case "RM": Disassemble = mn & " " & r & ", [" & HexAddr(operand) & "]"
+        Case "MR": Disassemble = mn & " [" & HexAddr(operand) & "], " & r
+        Case "A":  Disassemble = mn & " " & HexAddr(operand)
+        Case "RK": Disassemble = mn & " " & r & ", [KBD]"
+        Case "LR": Disassemble = mn & " [LCD], " & r
+    End Select
+End Function
+
+' 9-bit address as "0x1FF".
+Public Function HexAddr(ByVal addr As Integer) As String
+    HexAddr = "0x" & Right$("000" & Hex$(addr And VADDR_MAX), 3)
+End Function
