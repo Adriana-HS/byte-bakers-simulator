@@ -207,3 +207,63 @@ End Function
 Public Function HexAddr(ByVal addr As Integer) As String
     HexAddr = "0x" & Right$("000" & Hex$(addr And VADDR_MAX), 3)
 End Function
+
+' =====================================================================
+' Test_ISA - self-check of the instruction set.
+' Run it from the VBA editor (F5); results go to the Immediate window.
+' =====================================================================
+Public Sub Test_ISA()
+    Dim fails As Integer, used As Integer, roundTripFails As Integer
+    Dim op As Integer, reg As Integer, k As Integer
+    Dim dOp As Integer, dReg As Integer, dOperand As Integer
+    Dim operands As Variant
+
+    ' Edge cases from the task
+    fails = fails + IsaCheck("ADD AX, BX = 0x2801", Encode(OP_ADD_RR, R_AX, R_BX) = &H2801&)
+    fails = fails + IsaCheck("LOAD DX, [0x1FF] = 0x1FFF", Encode(OP_LOAD, R_DX, &H1FF) = &H1FFF&)
+    fails = fails + IsaCheck("MOV DX, 255 = 0x0EFF", Encode(OP_MOV_RI, R_DX, 255) = &HEFF&)
+    fails = fails + IsaCheck("HLT = 0xF800", Encode(OP_HLT, 0, 0) = &HF800&)
+    Decode &H1FFF&, dOp, dReg, dOperand
+    fails = fails + IsaCheck("Decode 0x1FFF -> LOAD, DX, 0x1FF", dOp = OP_LOAD And dReg = R_DX And dOperand = &H1FF)
+
+    ' Encode/Decode round trip for every opcode, register and operand
+    operands = Array(0, 1, 2, 3, 127, 128, 255, 256, 300, 511)
+    For op = 0 To OPCODE_MAX
+        If IsValidOpcode(op) Then used = used + 1
+        For reg = 0 To 3
+            For k = LBound(operands) To UBound(operands)
+                Decode Encode(op, reg, operands(k)), dOp, dReg, dOperand
+                If dOp <> op Or dReg <> reg Or dOperand <> operands(k) Then roundTripFails = roundTripFails + 1
+            Next k
+        Next reg
+    Next op
+    fails = fails + IsaCheck("Encode/Decode round trip (1280 cases)", roundTripFails = 0)
+    fails = fails + IsaCheck(NUM_INSTRUCTIONS & " instructions in the ISA", used = NUM_INSTRUCTIONS)
+
+    ' Assembler lookup
+    fails = fails + IsaCheck("OpcodeInfo(""ADD"", ""RR"") = 0x05", OpcodeInfo("ADD", "RR") = &H5)
+    fails = fails + IsaCheck("OpcodeInfo is case-insensitive", OpcodeInfo("add", "ri") = OP_ADD_RI)
+    fails = fails + IsaCheck("OpcodeInfo of an invalid pair = -1", OpcodeInfo("ADD", "A") = -1 And OpcodeInfo("FOO", "") = -1)
+    roundTripFails = 0
+    For op = 0 To OPCODE_MAX
+        If IsValidOpcode(op) Then
+            If OpcodeInfo(Mnemonic(op), OpFormat(op)) <> op Then roundTripFails = roundTripFails + 1
+        End If
+    Next op
+    fails = fails + IsaCheck("Every mnemonic + format is unique", roundTripFails = 0)
+
+    ' Disassembler
+    fails = fails + IsaCheck("Disassemble ADD AX, BX", Disassemble(&H2801&) = "ADD AX, BX")
+    fails = fails + IsaCheck("Disassemble LOAD CX, [0x1FF]", Disassemble(Encode(OP_LOAD, R_CX, &H1FF)) = "LOAD CX, [0x1FF]")
+    fails = fails + IsaCheck("Disassemble STORE [0x040], BX", Disassemble(Encode(OP_STORE, R_BX, &H40)) = "STORE [0x040], BX")
+    fails = fails + IsaCheck("Disassemble MOV DX, 255", Disassemble(Encode(OP_MOV_RI, R_DX, 255)) = "MOV DX, 255")
+    fails = fails + IsaCheck("Disassemble OUT [LCD], AX", Disassemble(Encode(OP_OUT, R_AX, 0)) = "OUT [LCD], AX")
+    fails = fails + IsaCheck("Disassemble JNZ 0x010", Disassemble(Encode(OP_JNZ, 0, &H10)) = "JNZ 0x010")
+
+    Debug.Print IIf(fails = 0, "Test_ISA: ALL OK", "Test_ISA: " & fails & " FAIL(S)")
+End Sub
+
+Private Function IsaCheck(ByVal what As String, ByVal passed As Boolean) As Integer
+    Debug.Print IIf(passed, "  OK    ", "  FAIL  ") & what
+    IsaCheck = IIf(passed, 0, 1)
+End Function
