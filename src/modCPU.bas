@@ -72,3 +72,27 @@ Public Sub SetIR(ByVal v As Long)
     CPU.IR = v And &HFFFF&
 End Sub
 
+' ---------------------------------------------------------------------
+' Register names (used by the assembler, the disassembler and the panel)
+' ---------------------------------------------------------------------
+Public Function RegName(ByVal i As Integer) As String
+    Select Case i
+        Case R_AX: RegName = "AX"
+        Case R_BX: RegName = "BX"
+        Case R_CX: RegName = "CX"
+        Case R_DX: RegName = "DX"
+        Case Else: RegName = "??"
+    End Select
+End Function
+
+' "CX" -> 2. Case and spaces are ignored. Returns -1 if it is not a register.
+Public Function RegIndex(ByVal nm As String) As Integer
+    Select Case UCase$(Trim$(nm))
+        Case "AX": RegIndex = R_AX
+        Case "BX": RegIndex = R_BX
+        Case "CX": RegIndex = R_CX
+        Case "DX": RegIndex = R_DX
+        Case Else: RegIndex = -1
+    End Select
+End Function
+

@@ -10,9 +10,6 @@ Attribute VB_Name = "modStubs_Adriana"
 ' =====================================================================
 Option Explicit
 
-' --- modCPU (#4) ---
-Public Function RegName(ByVal i As Integer) As String: RegName = Choose(i + 1, "AX", "BX", "CX", "DX"): End Function
-
 ' --- modBus (#6) ---
 Public Sub ReleaseBuses(): End Sub
 Public Sub DriveDataBus(ByVal source As String, ByVal value As Integer, ByVal isInternal As Boolean): End Sub
