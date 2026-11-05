@@ -15,7 +15,6 @@ Public Sub ResetCPU(): End Sub
 Public Function RegName(ByVal i As Integer) As String: RegName = Choose(i + 1, "AX", "BX", "CX", "DX"): End Function
 
 ' --- modISA (#3) ---
-Public Function Encode(ByVal op As Integer, ByVal reg As Integer, ByVal operand As Integer) As Long: Encode = 0: End Function
 Public Function OpcodeInfo(ByVal mnemonic As String, ByVal fmt As String) As Integer: OpcodeInfo = -1: End Function
 
 ' --- modBus (#6) ---
