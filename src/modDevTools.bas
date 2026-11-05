@@ -25,14 +25,20 @@ Private Sub ShowTrustError()
 End Sub
 
 ' ---------- EXPORTAR ----------
+' Exporta los modulos a destPath (por defecto, src\ del repo).
 ' Devuelve cuantos modulos exporto; -1 si hubo error
-Private Function ExportModulesCore() As Integer
-    Dim comp As Object, ext As String, n As Integer
-    If Not SrcExists() Then
-        MsgBox "No existe la carpeta src. Abre el libro desde la carpeta excel\ del repositorio.", _
-               vbExclamation, "Byte Bakers"
-        ExportModulesCore = -1
-        Exit Function
+Private Function ExportModulesCore(Optional ByVal destPath As String = "") As Integer
+    Dim comp As Object, ext As String, n As Integer, dest As String
+    If destPath = "" Then
+        If Not SrcExists() Then
+            MsgBox "No existe la carpeta src. Abre el libro desde la carpeta excel\ del repositorio.", _
+                   vbExclamation, "Byte Bakers"
+            ExportModulesCore = -1
+            Exit Function
+        End If
+        dest = SrcPath()
+    Else
+        dest = destPath
     End If
     On Error GoTo EH
     For Each comp In ThisWorkbook.VBProject.VBComponents
@@ -42,7 +48,7 @@ Private Function ExportModulesCore() As Integer
             Case Else: ext = ""       ' hojas y ThisWorkbook: no se exportan
         End Select
         If ext <> "" Then
-            comp.Export SrcPath() & comp.Name & ext
+            comp.Export dest & comp.Name & ext
             n = n + 1
         End If
     Next comp
@@ -116,27 +122,18 @@ Public Sub ImportModules()
 End Sub
 
 ' ---------- PRUEBA ----------
-' Ejecutar desde el editor VBA (F5 con el cursor dentro) y mirar la ventana Inmediato (Ctrl+G)
+' Ejecutar desde el editor VBA (F5 con el cursor dentro) y mirar la ventana Inmediato (Ctrl+G).
+' NO escribe en src\: importa desde src\ y exporta solo a una carpeta temporal.
 Public Sub Test_DevTools()
     Dim fails As Integer, nBefore As Integer, nAfter As Integer
-    Dim comp As Object, nExp As Integer, nImp As Integer
+    Dim comp As Object, nExp As Integer, nImp As Integer, tmp As String
 
-    ' 1) Exportar: src\ debe quedar con los modulos del libro
-    nExp = ExportModulesCore()
-    If nExp < 1 Then
-        fails = fails + 1: Debug.Print "  FAIL  ExportModules no exporto nada"
-    End If
-    If Dir(SrcPath() & "modDevTools.bas") = "" Then
-        fails = fails + 1: Debug.Print "  FAIL  no existe src\modDevTools.bas"
-    End If
-
-    ' 2) Sincronizar: trae a este libro los modulos de src\ que le falten
-    '    (ya exportamos, asi que no se pierde nada del libro)
+    ' 1) Sincronizar: trae a este libro los modulos de src\
     If ImportModulesCore() < 0 Then
         fails = fails + 1: Debug.Print "  FAIL  la sincronizacion inicial dio error"
     End If
 
-    ' 3) Ida y vuelta: importar de nuevo no debe cambiar la cantidad de componentes
+    ' 2) Ida y vuelta: importar de nuevo no debe cambiar la cantidad de componentes
     nBefore = ThisWorkbook.VBProject.VBComponents.Count
     nImp = ImportModulesCore()
     nAfter = ThisWorkbook.VBProject.VBComponents.Count
@@ -149,7 +146,28 @@ Public Sub Test_DevTools()
             fails = fails + 1: Debug.Print "  FAIL  quedo un modulo viejo: " & comp.Name
         End If
     Next comp
-    Debug.Print "Exportados: " & nExp & " | Importados: " & nImp
+
+    ' 3) Exportar a una carpeta temporal (para no tocar src\)
+    tmp = Environ("TEMP") & "\bb_devtools_test\"
+    On Error Resume Next
+    If Dir(tmp, vbDirectory) = "" Then MkDir tmp
+    On Error GoTo 0
+    nExp = ExportModulesCore(tmp)
+    If nExp < 1 Then
+        fails = fails + 1: Debug.Print "  FAIL  ExportModules no exporto nada"
+    End If
+    If Dir(tmp & "modDevTools.bas") = "" Then
+        fails = fails + 1: Debug.Print "  FAIL  no se exporto modDevTools.bas"
+    End If
+
+    ' 4) Limpieza de la carpeta temporal
+    On Error Resume Next
+    Kill tmp & "*.bas"
+    Kill tmp & "*.cls"
+    RmDir tmp
+    On Error GoTo 0
+
+    Debug.Print "Importados: " & nImp & " | Exportados (carpeta temporal): " & nExp
     Debug.Print IIf(fails = 0, "Test_DevTools: ALL OK", "Test_DevTools: " & fails & " FAIL(S)")
 End Sub
 
