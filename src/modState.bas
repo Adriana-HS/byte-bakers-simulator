@@ -155,3 +155,46 @@ Private Sub ResetBusState()
         .Internal = False
     End With
 End Sub
+
+' =====================================================================
+' Test_State - self-check of the state contract.
+' Run it from the VBA editor (F5); results go to the Immediate window.
+' =====================================================================
+Public Sub Test_State()
+    Dim i As Integer, fails As Integer
+
+    ' Dirty the machine, then reset it
+    CPU.PC = 300: CPU.R(R_AX) = 99: CPU.ZF = True: CPU.Halted = True
+    RAM(10) = 77: PageTable(3).Present = True: FrameOwner(2) = 3
+    L1I.Valid = True: L2(2).Valid = True
+    Bus.Data = 5: Bus.DataDriver = "AX": Bus.Clk = True
+    Stats.PageFaults = 4: Clock = 12
+    ResetMachine
+
+    fails = fails + Check("CPU cleared", CPU.PC = 0 And CPU.R(R_AX) = 0 And Not CPU.ZF And Not CPU.Halted)
+    fails = fails + Check("RAM cleared", RAM(10) = 0)
+    fails = fails + Check("Page 15 in frame 7", PageTable(IO_VPAGE).Present And PageTable(IO_VPAGE).PFN = IO_FRAME)
+    fails = fails + Check("Page 15 pinned", PageTable(IO_VPAGE).Pinned)
+    fails = fails + Check("Frame 7 owned by page 15", FrameOwner(IO_FRAME) = IO_VPAGE)
+    For i = 0 To NUM_VPAGES - 2
+        If PageTable(i).Present Then fails = fails + Check("Page " & i & " absent", False)
+    Next i
+    For i = 0 To NUM_FRAMES - 2
+        If FrameOwner(i) <> -1 Then fails = fails + Check("Frame " & i & " free", False)
+    Next i
+    fails = fails + Check("Caches invalid", Not L1I.Valid And Not L1D.Valid And Not L2(2).Valid)
+    fails = fails + Check("Data bus High-Z", Bus.Data = HIGH_Z And Bus.DataDriver = "")
+    fails = fails + Check("Address buses High-Z", Bus.IntAddr = HIGH_Z And Bus.ExtAddr = HIGH_Z)
+    fails = fails + Check("Control word and CLK off", Bus.Ctrl = 0 And Not Bus.Clk)
+    fails = fails + Check("Stats and clock cleared", Stats.PageFaults = 0 And Clock = 0)
+    fails = fails + Check("Memory map sizes", VMEM_SIZE = NUM_VPAGES * PAGE_SIZE And RAM_SIZE = NUM_FRAMES * PAGE_SIZE)
+    fails = fails + Check("I/O cells inside frame 7", KBD_HEAD \ PAGE_SIZE = IO_FRAME And LCD_BASE + IO_BUF_SIZE - 1 = PADDR_MAX)
+    fails = fails + Check("Virtual I/O = page 15", V_KBD_BASE \ PAGE_SIZE = IO_VPAGE And V_KBD_BASE Mod PAGE_SIZE = KBD_BASE Mod PAGE_SIZE)
+
+    Debug.Print IIf(fails = 0, "Test_State: ALL OK", "Test_State: " & fails & " FAIL(S)")
+End Sub
+
+Private Function Check(ByVal what As String, ByVal passed As Boolean) As Integer
+    Debug.Print IIf(passed, "  OK    ", "  FAIL  ") & what
+    Check = IIf(passed, 0, 1)
+End Function
