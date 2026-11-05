@@ -81,6 +81,7 @@ Public Const SH_SIM As String = "Simulator"
 Public Const SH_MEM As String = "Memory"
 Public Const SH_PROG As String = "Programs"
 Public Const SH_LOG As String = "Log"
+Public Const SH_ISA As String = "ISA"         ' reference only: cells, no animated shapes
 
 ' ---------------------------------------------------------------------
 ' Colors: hexadecimal BGR Const values (&HBBGGRR&).
