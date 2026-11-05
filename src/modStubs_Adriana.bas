@@ -14,10 +14,6 @@ Option Explicit
 Public Sub ResetCPU(): End Sub
 Public Function RegName(ByVal i As Integer) As String: RegName = Choose(i + 1, "AX", "BX", "CX", "DX"): End Function
 
-' --- modISA (#3) ---
-Public Function Encode(ByVal op As Integer, ByVal reg As Integer, ByVal operand As Integer) As Long: Encode = 0: End Function
-Public Function OpcodeInfo(ByVal mnemonic As String, ByVal fmt As String) As Integer: OpcodeInfo = -1: End Function
-
 ' --- modBus (#6) ---
 Public Sub ReleaseBuses(): End Sub
 Public Sub DriveDataBus(ByVal source As String, ByVal value As Integer, ByVal isInternal As Boolean): End Sub
