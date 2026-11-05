@@ -43,6 +43,10 @@ Public Const OP_HLT As Integer = &H1F         ' HLT
 Public Const OPCODE_MAX As Integer = 31       ' 5-bit opcode field
 Public Const NUM_INSTRUCTIONS As Integer = 24 ' opcodes in use
 
+' ISA reference sheet layout (see BuildISASheet)
+Public Const ISA_HEADER_ROW As Long = 11      ' table header; instructions start below it
+Private Const ISA_COLS As Long = 9            ' columns B..J
+
 ' =====================================================================
 ' Encode - packs one instruction into 16 bits.
 '   op      opcode 0-31
@@ -274,8 +278,6 @@ End Function
 ' executes. Cells only: no shapes, so the animation engine never
 ' looks here.
 ' =====================================================================
-Public Const ISA_HEADER_ROW As Long = 11      ' table header; instructions start below it
-Private Const ISA_COLS As Long = 9            ' columns B..J
 
 Public Sub BuildISASheet()
     Dim ws As Worksheet, op As Integer, r As Long, ir As Long, lastRow As Long
