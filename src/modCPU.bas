@@ -96,3 +96,63 @@ Public Function RegIndex(ByVal nm As String) As Integer
     End Select
 End Function
 
+' =====================================================================
+' Test_CPU - self-check of the register file.
+' Run it from the VBA editor (F5); results go to the Immediate window.
+' =====================================================================
+Public Sub Test_CPU()
+    Dim fails As Integer, i As Integer, ok As Boolean
+
+    ' General registers
+    ok = True
+    For i = R_AX To R_DX
+        SetReg i, 10 + i
+        If GetReg(i) <> 10 + i Then ok = False
+    Next i
+    fails = fails + CpuCheck("GetReg/SetReg for AX, BX, CX, DX", ok)
+    SetReg R_AX, 256
+    fails = fails + CpuCheck("SetReg 256 stores 0", GetReg(R_AX) = 0)
+    SetReg R_BX, -1
+    fails = fails + CpuCheck("SetReg -1 stores 255", GetReg(R_BX) = 255)
+    SetReg R_CX, 300
+    fails = fails + CpuCheck("SetReg 300 stores 44", GetReg(R_CX) = 44)
+
+    ' Control registers
+    SetPC 511: IncPC
+    fails = fails + CpuCheck("PC wraps from 511 to 0", CPU.PC = 0)
+    SetPC 512
+    fails = fails + CpuCheck("SetPC 512 stores 0", CPU.PC = 0)
+    SetMAR -1
+    fails = fails + CpuCheck("MAR is 9 bits (-1 -> 511)", CPU.MAR = 511)
+    SetMDR 256
+    fails = fails + CpuCheck("MDR is 8 bits (256 -> 0)", CPU.MDR = 0)
+    SetIR &H12801
+    fails = fails + CpuCheck("IR keeps 16 bits (0x12801 -> 0x2801)", CPU.IR = &H2801&)
+
+    ' Names
+    fails = fails + CpuCheck("RegName 0-3 = AX BX CX DX", RegName(0) & RegName(1) & RegName(2) & RegName(3) = "AXBXCXDX")
+    fails = fails + CpuCheck("RegIndex(""CX"") = 2", RegIndex("CX") = 2)
+    fails = fails + CpuCheck("RegIndex ignores case and spaces", RegIndex(" dx ") = R_DX)
+    fails = fails + CpuCheck("RegIndex(""EX"") = -1", RegIndex("EX") = -1)
+
+    ' Invalid index raises an error
+    On Error Resume Next
+    i = GetReg(4)
+    ok = (Err.Number <> 0)
+    Err.Clear
+    On Error GoTo 0
+    fails = fails + CpuCheck("GetReg(4) raises an error", ok)
+
+    ' Reset
+    CPU.ZF = True: CPU.CF = True: CPU.SF = True: CPU.Halted = True: SetPC 100
+    ResetCPU
+    fails = fails + CpuCheck("ResetCPU: PC = 0, flags clear, registers 0", _
+        CPU.PC = 0 And Not CPU.ZF And Not CPU.CF And Not CPU.SF And Not CPU.Halted And GetReg(R_BX) = 0)
+
+    Debug.Print IIf(fails = 0, "Test_CPU: ALL OK", "Test_CPU: " & fails & " FAIL(S)")
+End Sub
+
+Private Function CpuCheck(ByVal what As String, ByVal passed As Boolean) As Integer
+    Debug.Print IIf(passed, "  OK    ", "  FAIL  ") & what
+    CpuCheck = IIf(passed, 0, 1)
+End Function
