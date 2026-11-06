@@ -1,8 +1,10 @@
 # Byte Bakers — Simulador Avanzado de Computadora
 
-> 🇬🇧 [English version](README_EN.md)
+<p align="center">
+  <img src="docs/logo/logo-horizontal.png" alt="Byte Bakers" width="520"/>
+</p>
 
-<!-- Logo: docs/logo/ (tarea #24) -->
+> 🇬🇧 [English version](README_EN.md)
 
 Simulador de una computadora de 8 bits construido en **Excel + VBA**: CPU con 4 registros de propósito general, buses del sistema con **buffers tri-estado** y alta impedancia (High-Z), palabra de control animada, jerarquía de caché **L1I / L1D / L2**, **memoria virtual paginada** de 512 bytes sobre 256 bytes de RAM, y periféricos mapeados en memoria (**teclado** y **pantalla LCD 8x1**).
 
