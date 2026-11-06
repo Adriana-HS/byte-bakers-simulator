@@ -1,21 +1,57 @@
 Attribute VB_Name = "modStubs_Misael"
 ' =====================================================================
 ' modStubs_Misael - TEMPORARY empty signatures (not in the release)
-' Owner: Misael  |  Task: #25 (M2) and later M3/M7
+' Owner: Misael
 '
-' Public functions of Misael's modules that other members call before
-' they are implemented, so everybody's code compiles from day one.
 ' Rule: when a function is implemented, its stub is deleted in the SAME
 ' pull request; otherwise VBA raises "Ambiguous name detected".
 '
-' UI_* signatures for M2 live in modUI (this PR). Stubs left here are
-' for modules still pending (M3 dashboard, M7 I/O).
+' RefreshAll lives in modDashboard (#26). UI_* live in modUI (#25).
 ' =====================================================================
 Option Explicit
 
-' --- modDashboard (#26 / M3) ---
-Public Sub RefreshAll(): End Sub
+' ---------------------------------------------------------------------
+' TEMP compile bridges for M3 until A8 / A9 / K10 publish their stubs.
+' Must stay ABOVE all Subs (VBA forbids module vars after procedures).
+' When those modules land, DELETE these lines (same pattern as the old
+' UI_Highlight stub that lived here until M2).
+' ---------------------------------------------------------------------
+Public MicroStep As Integer   ' A8
+Public RunFlag As Boolean     ' A8
+
+' --- modKeyboard / modLCD (#28/#29 / M5+M6) ---
+Public Sub BuildIOPanel(ByVal ws As Worksheet)
+End Sub
+
+Public Sub RefreshKeyboard()
+End Sub
+
+Public Sub RefreshLCD()
+End Sub
 
 ' --- modIO (#30 / M7) ---
-Public Function IoRead(ByVal destReg As Integer) As Integer: IoRead = 0: End Function
-Public Sub IoWrite(ByVal v As Integer): End Sub
+Public Function IoRead(ByVal destReg As Integer) As Integer
+    IoRead = 0
+End Function
+
+Public Sub IoWrite(ByVal v As Integer)
+End Sub
+
+' --- A8 / A9 / K10 bridges (delete when real modules land) ---
+Public Sub StepMicro()
+    If MicroStep < 1 Then MicroStep = 1 Else MicroStep = MicroStep + 1
+End Sub
+
+Public Sub RunProgram()
+    RunFlag = True
+End Sub
+
+Public Sub BuildCPUPanel(ByVal ws As Worksheet)
+End Sub
+
+Public Sub RefreshCPUPanel()
+End Sub
+
+Public Sub BuildMiniMemory(ByVal ws As Worksheet)
+End Sub
+' RefreshMemoryPanel / RefreshStats already exist in modStubs_Karen.
