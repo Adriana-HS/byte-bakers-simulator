@@ -42,6 +42,7 @@ Kanban board: [GitHub Projects](https://github.com/users/Adriana-HS/projects/4)
 | 13 | [User manual](#13-user-manual) | Misael | [#33](https://github.com/Adriana-HS/byte-bakers-simulator/issues/33) |
 | 14 | [Methodology](#14-methodology) | Misael | [#33](https://github.com/Adriana-HS/byte-bakers-simulator/issues/33) |
 | 15 | [Repository layout](#15-repository-layout) | Adriana | [#1](https://github.com/Adriana-HS/byte-bakers-simulator/issues/1) |
+| 16 | [Contributing](#16-contributing) | Karen | [#12](https://github.com/Adriana-HS/byte-bakers-simulator/issues/12) |
 
 ---
 
@@ -116,3 +117,32 @@ byte-bakers-simulator/
 ├── README.md       Spanish documentation
 └── README_EN.md    English documentation
 ```
+
+## 16. Contributing
+
+### One-time setup
+
+1. Clone the repo and ALWAYS open `excel/ByteBakers.xlsm` from the repo's `excel/` folder (never a copy elsewhere).
+2. In Excel: File → Options → Trust Center → Trust Center Settings → Macro Settings → enable **Trust access to the VBA project object model**.
+3. Set Git `user.name` and the `user.email` registered on your GitHub account:
+   `git config user.name "Your Name"` and `git config user.email "you@email.com"`.
+4. Open the VBA editor (Alt + F11) and run **ImportModules** (Alt + F8) to load the code from `src/` into your workbook.
+
+### Daily workflow
+
+1. `git checkout develop && git pull`
+2. Create your branch: `git checkout -b feature/<your-name>/<module>-<topic>`
+3. Open Excel and run the **ImportModules** macro (loads everyone's latest code from `src/`).
+4. Work only on your own modules.
+5. Run the **ExportModules** macro (writes the modules to `src/`).
+6. `git add src/<your-module>.bas` → `git commit -m "feat(module): description (#issue)"` → `git push`
+7. Open a Pull Request into `develop` with a description, how to test, a screenshot and `Closes #n`.
+
+### Rules
+
+- Never commit the `.xlsm` (only the integrator does).
+- No direct commits to `main` or `develop`.
+- One task = one issue = one branch = one PR. Merge with "Create a merge commit" (no squash).
+- When you implement a function, delete it from `modStubs_<name>` in the same PR.
+- When pasting code into the VBA editor: Insert → Module, rename with F4, and do NOT paste the `Attribute VB_Name` line.
+- Only `git add` your own files (never `git add .`): when exporting, Excel also rewrites other people's modules with cosmetic differences (for example, it drops the trailing `&` from hexadecimal constants). If they show up as modified, restore them with `git restore src/<module>.bas`.

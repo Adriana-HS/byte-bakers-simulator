@@ -42,6 +42,7 @@ Tablero Kanban: [GitHub Projects](https://github.com/users/Adriana-HS/projects/4
 | 13 | [Manual de usuario](#13-manual-de-usuario) | Misael | [#33](https://github.com/Adriana-HS/byte-bakers-simulator/issues/33) |
 | 14 | [Metodología de trabajo](#14-metodología-de-trabajo) | Misael | [#33](https://github.com/Adriana-HS/byte-bakers-simulator/issues/33) |
 | 15 | [Estructura del repositorio](#15-estructura-del-repositorio) | Adriana | [#1](https://github.com/Adriana-HS/byte-bakers-simulator/issues/1) |
+| 16 | [Cómo contribuir](#16-cómo-contribuir) | Karen | [#12](https://github.com/Adriana-HS/byte-bakers-simulator/issues/12) |
 
 ---
 
@@ -116,3 +117,32 @@ byte-bakers-simulator/
 ├── README.md       documentación en español
 └── README_EN.md    documentación en inglés
 ```
+
+## 16. Cómo contribuir
+
+### Configuración inicial (una sola vez)
+
+1. Clona el repositorio y abre SIEMPRE `excel/ByteBakers.xlsm` desde la carpeta `excel/` del repo (nunca una copia en otra carpeta).
+2. En Excel: Archivo → Opciones → Centro de confianza → Configuración del Centro de confianza → Configuración de macros → activa **Confiar en el acceso al modelo de objetos de proyectos de VBA**.
+3. Configura Git con tu nombre y el correo registrado en tu cuenta de GitHub:
+   `git config user.name "Tu Nombre"` y `git config user.email "tu@correo.com"`.
+4. Abre el editor de VBA (Alt + F11) y ejecuta **ImportModules** (Alt + F8) para traer a tu libro el código de `src/`.
+
+### Flujo diario
+
+1. `git checkout develop && git pull`
+2. Crea tu rama: `git checkout -b feature/<tu-nombre>/<modulo>-<tema>`
+3. Abre Excel y ejecuta la macro **ImportModules** (trae el código más reciente de todos desde `src/`).
+4. Programa solo tus módulos.
+5. Ejecuta la macro **ExportModules** (escribe los módulos en `src/`).
+6. `git add src/<tu-modulo>.bas` → `git commit -m "feat(modulo): descripcion (#issue)"` → `git push`
+7. Abre un Pull Request hacia `develop` con descripción, cómo probar, captura y `Closes #n`.
+
+### Reglas
+
+- Nunca se hace commit del `.xlsm` (solo quien integra).
+- Nadie hace commit directo a `main` ni a `develop`.
+- Una tarea = un issue = una rama = un PR. Merge con "Create a merge commit" (no squash).
+- Al implementar una función, bórrala del módulo `modStubs_<nombre>` en el mismo PR.
+- Al pegar código en el editor VBA: Insertar → Módulo, renombra con F4 y NO pegues la línea `Attribute VB_Name`.
+- Haz `git add` solo de tus archivos (nunca `git add .`): al exportar, Excel reescribe también los módulos de los demás con diferencias cosméticas (por ejemplo, quita el `&` final de las constantes hexadecimales). Si aparecen modificados, restáuralos con `git restore src/<modulo>.bas`.
