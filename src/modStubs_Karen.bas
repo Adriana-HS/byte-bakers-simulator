@@ -6,10 +6,8 @@ Option Explicit
 ' PR (otherwise VBA raises "Ambiguous name detected").
 ' =====================================================================
 
-' --- modCache (K7, K8) ---
+' --- modCache (K8) ---
 Public Sub InvalidateAllCaches(): End Sub
-Public Function CacheReadL1D(ByVal paddr As Integer) As Integer: CacheReadL1D = RAM(paddr): End Function
-Public Sub CacheWriteL1D(ByVal paddr As Integer, ByVal value As Integer): RAM(paddr) = value: End Sub
 Public Sub InvalidateFrame(ByVal pfn As Integer): End Sub
 
 ' --- Statistics (K9) ---
