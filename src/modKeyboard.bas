@@ -19,9 +19,9 @@ Option Explicit
 Private Const KBD_INK As Long = CLR_BG
 Private Const NO_FILL As Long = -1
 
-' 12 pt grid inside frm_IO (20, 390, 640, 160)
+' 12 pt grid inside frm_IO (20, 406, 640, 156); the frame header tab sits above PAD_T
 Private Const PAD_L As Single = 32
-Private Const PAD_T As Single = 402
+Private Const PAD_T As Single = 422
 Private Const CELL_W As Single = 36
 Private Const CELL_H As Single = 36
 Private Const CELL_GAP As Single = 6
