@@ -11,11 +11,20 @@ Option Explicit
 ' FrameOwner) with its first bytes, and repaints the cache boxes grey.
 ' Piece 3: ShowTranslation. A strip (xlt_box, row 37) that shows
 ' vaddr = VPN | offset -> PFN | offset = paddr, or PAGE FAULT.
+' Piece 4: UI_PageFaultFlash (page table row blinks red) and
+' UI_AnimateSwapIn (a block travels from the swap grid to the frame).
 ' =====================================================================
 
 Private Const PANEL_TOP_ROW As Long = 28
 Private Const XLT_ROW As Long = 37
 Private Const XLT_NAME As String = "xlt_box"
+Private Const TOKEN_NAME As String = "tok_swap"
+Private Const TOKEN_W As Single = 36
+Private Const TOKEN_H As Single = 18
+Private Const TOKEN_STEPS As Integer = 12
+Private Const PT_FIRST_ROW As Long = 2      ' page table: VPN 0 is on row 2
+Private Const SWAP_FIRST_ROW As Long = 2    ' swap grid: P0 is on row 2
+Private Const SWAP_FIRST_COL As Long = 9    ' swap grid: first byte is column I
 Private Const BOX_W As Single = 78
 Private Const STEP_X As Single = 84
 Private Const FRAME_H As Single = 50
@@ -146,6 +155,91 @@ Private Function ToBin(ByVal v As Integer, ByVal bits As Integer) As String
     ToBin = s
 End Function
 
+' The page table row of vpn blinks dark red twice, then gets its colors back.
+' Skipped when animations are off (AnimDelay <= 0).
+Public Sub UI_PageFaultFlash(ByVal vpn As Integer)
+    Dim ws As Worksheet, c As Integer, n As Integer, r As Long
+    Dim oldPat(1 To 5) As Long, oldClr(1 To 5) As Long, oldFnt(1 To 5) As Long
+    If AnimDelay <= 0 Then Exit Sub
+    If vpn < 0 Or vpn >= NUM_VPAGES Then Exit Sub
+    Set ws = ThisWorkbook.Worksheets(SH_MEM)
+    r = PT_FIRST_ROW + vpn
+
+    ' Remember the original look of the 5 cells (A..E)
+    For c = 1 To 5
+        oldPat(c) = ws.Cells(r, c).Interior.Pattern
+        oldClr(c) = ws.Cells(r, c).Interior.Color
+        oldFnt(c) = ws.Cells(r, c).Font.Color
+    Next c
+
+    For n = 1 To 2
+        For c = 1 To 5
+            ws.Cells(r, c).Interior.Color = CLR_FAULT
+            ws.Cells(r, c).Font.Color = CLR_TEXT
+        Next c
+        UI_Wait 150
+        For c = 1 To 5
+            RestoreCell ws.Cells(r, c), oldPat(c), oldClr(c), oldFnt(c)
+        Next c
+        UI_Wait 100
+    Next n
+End Sub
+
+Private Sub RestoreCell(ByVal cel As Range, ByVal pat As Long, ByVal clr As Long, ByVal fnt As Long)
+    If pat = xlNone Then
+        cel.Interior.Pattern = xlNone
+    Else
+        cel.Interior.Color = clr
+    End If
+    cel.Font.Color = fnt
+End Sub
+
+' A block "P<vpn>" travels from its row in the swap grid to frame <pfn>.
+' When it arrives the frame turns coral and shows the page. The bytes
+' are filled in later by RefreshMemoryPanel.
+' Skipped when animations are off (AnimDelay <= 0).
+Public Sub UI_AnimateSwapIn(ByVal vpn As Integer, ByVal pfn As Integer)
+    Dim ws As Worksheet, tok As Shape, frm As Shape, k As Integer
+    Dim x0 As Single, y0 As Single, x1 As Single, y1 As Single
+    If AnimDelay <= 0 Then Exit Sub
+    If vpn < 0 Or vpn >= NUM_VPAGES Then Exit Sub
+    If pfn < 0 Or pfn >= NUM_FRAMES Then Exit Sub
+    If pfn = IO_FRAME Then Exit Sub
+    Set ws = ThisWorkbook.Worksheets(SH_MEM)
+    If Not HasShape(ws, PFX_FRM & pfn) Then BuildMemoryPanel
+    Set frm = ws.Shapes(PFX_FRM & pfn)
+
+    x0 = ws.Cells(SWAP_FIRST_ROW + vpn, SWAP_FIRST_COL).Left
+    y0 = ws.Cells(SWAP_FIRST_ROW + vpn, SWAP_FIRST_COL).Top
+    x1 = frm.Left + (frm.Width - TOKEN_W) / 2
+    y1 = frm.Top + (frm.Height - TOKEN_H) / 2
+
+    Set tok = UI_AddBox(ws, TOKEN_NAME, x0, y0, TOKEN_W, TOKEN_H, "P" & vpn, CLR_ACTIVE)
+    For k = 1 To TOKEN_STEPS
+        tok.Left = x0 + (x1 - x0) * k / TOKEN_STEPS
+        tok.Top = y0 + (y1 - y0) * k / TOKEN_STEPS
+        DoEvents
+        UI_Wait 20
+    Next k
+    tok.Delete
+
+    UI_SetText PFX_FRM & pfn, "F" & pfn & vbLf & "P" & vpn
+    UI_SetFill PFX_FRM & pfn, CLR_ACTIVE
+End Sub
+
+' Visual demo for screenshots: a fault on page 3 loading into frame 2.
+' Does not change the machine state.
+Public Sub Demo_PageFaultAnim()
+    Dim oldDelay As Long
+    oldDelay = AnimDelay
+    If AnimDelay <= 0 Then AnimDelay = 300   ' animations on only while the demo runs
+    BuildMemoryPanel
+    ShowTranslation 3, 5
+    UI_PageFaultFlash 3
+    UI_AnimateSwapIn 3, 2
+    AnimDelay = oldDelay
+End Sub
+
 ' ---------- TESTS ----------
 
 Private Function HasShape(ByVal ws As Worksheet, ByVal nm As String) As Boolean
@@ -275,5 +369,46 @@ Public Sub Test_ShowTranslation()
     BuildMemoryPanel
 
     Debug.Print IIf(fails = 0, "Test_ShowTranslation: ALL OK", "Test_ShowTranslation: " & fails & " FAIL(S)")
+End Sub
+
+Public Sub Test_PageFaultAnim()
+    Dim fails As Integer, ws As Worksheet, t As String, c As Integer
+    Dim before(1 To 5) As Long, beforePat(1 To 5) As Long
+    Dim oldDelay As Long
+    Set ws = ThisWorkbook.Worksheets(SH_MEM)
+    BuildMemoryPanel
+
+    ' The test needs the animations on (they are skipped when AnimDelay <= 0)
+    oldDelay = AnimDelay
+    If AnimDelay <= 0 Then AnimDelay = 1
+
+    ' 1) The flash gives the page table row its original colors back
+    For c = 1 To 5
+        before(c) = ws.Cells(PT_FIRST_ROW + 3, c).Interior.Color
+        beforePat(c) = ws.Cells(PT_FIRST_ROW + 3, c).Interior.Pattern
+    Next c
+    UI_PageFaultFlash 3
+    For c = 1 To 5
+        If ws.Cells(PT_FIRST_ROW + 3, c).Interior.Pattern <> beforePat(c) Then fails = fails + 1: Debug.Print "  FAIL  1: row of P3 changed its fill pattern in column " & c
+        If beforePat(c) <> xlNone And ws.Cells(PT_FIRST_ROW + 3, c).Interior.Color <> before(c) Then fails = fails + 1: Debug.Print "  FAIL  1: row of P3 did not get its color back in column " & c
+    Next c
+
+    ' 2) The swap-in leaves frame 2 coral with "P5" and no token behind
+    UI_AnimateSwapIn 5, 2
+    t = ws.Shapes(PFX_FRM & "2").TextFrame2.TextRange.Text
+    If InStr(t, "P5") = 0 Then fails = fails + 1: Debug.Print "  FAIL  2: frm_2 must show P5, got: " & Replace(t, vbLf, "/")
+    If ws.Shapes(PFX_FRM & "2").fill.ForeColor.RGB <> CLR_ACTIVE Then fails = fails + 1: Debug.Print "  FAIL  2: frm_2 must be coral (CLR_ACTIVE)"
+    If HasShape(ws, TOKEN_NAME) Then fails = fails + 1: Debug.Print "  FAIL  2: the token must be deleted after the animation"
+
+    ' 3) Frame 7 (I/O) is never touched
+    t = ws.Shapes(PFX_FRM & IO_FRAME).TextFrame2.TextRange.Text
+    UI_AnimateSwapIn 5, IO_FRAME
+    If ws.Shapes(PFX_FRM & IO_FRAME).TextFrame2.TextRange.Text <> t Then fails = fails + 1: Debug.Print "  FAIL  3: frm_7 must not change"
+
+    ' Cleanup
+    AnimDelay = oldDelay
+    BuildMemoryPanel
+
+    Debug.Print IIf(fails = 0, "Test_PageFaultAnim: ALL OK", "Test_PageFaultAnim: " & fails & " FAIL(S)")
 End Sub
 
