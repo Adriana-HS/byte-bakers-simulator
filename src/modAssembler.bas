@@ -308,6 +308,9 @@ Private Sub PaintAsmStatus(ByVal ok As Boolean)
     ws.Range("A1").Font.Bold = True
     ws.Range("A1").Font.Color = CLR_TEXT
     ws.Range("A1").Interior.Color = CLR_BG
+    ws.Range("A1").HorizontalAlignment = xlLeft
+    ws.Range("A1").IndentLevel = 1
+    If ws.Columns("A").ColumnWidth < 15 Then ws.Columns("A").ColumnWidth = 15
 
     Set banner = ws.Range("B2:F2")
     banner.Merge
