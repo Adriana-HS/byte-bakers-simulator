@@ -6,6 +6,11 @@ Attribute VB_Name = "modUI"
 ' Library every panel uses: create boxes and wires, highlight, High-Z,
 ' pulse a wire, move a value token and wait according to AnimDelay.
 ' Basis of the "wire animation" asked by rubric G7 / G1.
+'
+' Transfers (#65 / M12): UI_AnimateTransfer shows one micro-operation in
+' four beats - driver EN (coral), bus (coral), value token travelling in
+' right angles along the bus, receiver LD (amber) - and leaves an arrow.
+' Every temporary shape is named anim_* and removed by UI_ClearTransfer.
 ' =====================================================================
 Option Explicit
 
@@ -17,6 +22,14 @@ Option Explicit
 
 ' ms per animation step (speed slider 0..1000). 0 = instant.
 Public AnimDelay As Long
+
+' Design tokens derived from the brand palette (modConfig)
+Public Const CLR_SURFACE As Long = &H453427&     ' RGB(39, 52, 69)    panel card, navy +1 step
+Public Const CLR_BORDER As Long = &H59473A&      ' RGB(58, 71, 89)    1 pt card edge
+Public Const CLR_SOFT As Long = &HC8D5F6&        ' RGB(246, 213, 200) coral tint for primary buttons
+Public Const CLR_INK As Long = CLR_BG            ' navy text on light fills
+
+Private Const ANIM_PFX As String = "anim_"
 
 ' ---------------------------------------------------------------------
 ' Shp - resolve a shape on Simulator or Memory without crashing.
@@ -56,15 +69,16 @@ Public Function UI_AddBox(ByVal ws As Worksheet, ByVal nm As String, ByVal l As 
         Optional ByVal fill As Long = -1) As Shape
     Dim s As Shape
     On Error Resume Next: ws.Shapes(nm).Delete: On Error GoTo 0
+    If fill = -1 Then fill = CLR_HIGHZ
     Set s = ws.Shapes.AddShape(msoShapeRoundedRectangle, l, t, w, h)
     s.Name = nm
     s.Line.Visible = msoFalse
-    s.Fill.ForeColor.RGB = IIf(fill = -1, CLR_HIGHZ, fill)
+    s.Fill.ForeColor.RGB = fill
     With s.TextFrame2
         .TextRange.Text = txt
         .TextRange.Font.Size = 10
         .TextRange.Font.Name = "Consolas"
-        .TextRange.Font.Fill.ForeColor.RGB = CLR_TEXT
+        .TextRange.Font.Fill.ForeColor.RGB = UI_InkFor(fill)
         .TextRange.ParagraphFormat.Alignment = msoAlignCenter
         .VerticalAnchor = msoAnchorMiddle
     End With
@@ -94,8 +108,57 @@ Public Sub UI_SetFill(ByVal nm As String, ByVal clr As Long)
         s.Line.ForeColor.RGB = clr
     Else
         s.Fill.ForeColor.RGB = clr
+        ' Keep text readable when the fill changes (gray, coral, amber...)
+        On Error Resume Next
+        If s.Fill.Visible And s.TextFrame2.HasText Then
+            s.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = UI_InkFor(clr)
+        End If
+        On Error GoTo 0
     End If
 End Sub
+
+' =====================================================================
+' Readable ink (WCAG relative luminance)
+' =====================================================================
+
+' Navy or cream, whichever contrasts more with the fill.
+Public Function UI_InkFor(ByVal fill As Long) As Long
+    If fill < 0 Then
+        UI_InkFor = CLR_TEXT
+    ElseIf UI_Contrast(fill, CLR_INK) >= UI_Contrast(fill, CLR_TEXT) Then
+        UI_InkFor = CLR_INK
+    Else
+        UI_InkFor = CLR_TEXT
+    End If
+End Function
+
+' Contrast ratio 1..21 between two colors (BGR Longs).
+Public Function UI_Contrast(ByVal clrA As Long, ByVal clrB As Long) As Double
+    Dim la As Double, lb As Double
+    la = Luminance(clrA)
+    lb = Luminance(clrB)
+    If la < lb Then
+        UI_Contrast = (lb + 0.05) / (la + 0.05)
+    Else
+        UI_Contrast = (la + 0.05) / (lb + 0.05)
+    End If
+End Function
+
+Private Function Luminance(ByVal clr As Long) As Double
+    Luminance = 0.2126 * Linear(clr And &HFF&) _
+              + 0.7152 * Linear((clr \ &H100&) And &HFF&) _
+              + 0.0722 * Linear((clr \ &H10000) And &HFF&)
+End Function
+
+Private Function Linear(ByVal channel As Long) As Double
+    Dim v As Double
+    v = channel / 255#
+    If v <= 0.03928 Then
+        Linear = v / 12.92
+    Else
+        Linear = ((v + 0.055) / 1.055) ^ 2.4
+    End If
+End Function
 
 Public Sub UI_SetText(ByVal nm As String, ByVal txt As String)
     Dim s As Shape
