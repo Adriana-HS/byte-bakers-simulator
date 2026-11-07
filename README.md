@@ -54,27 +54,110 @@ _Pendiente — enlace público al libro `ByteBakers.xlsm` (release v1.0.0)._
 
 ## 2. Arquitectura del CPU
 
-_Pendiente._
+CPU de **8 bits** con cuatro registros de propósito general (**AX, BX, CX, DX**), registros de control (**PC, IR, MAR, MDR, PADDR**) y temporarios de ALU (**TA, TB**). Flags: **ZF** (cero), **CF** (acarreo/préstamo), **SF** (signo, bit 7).
+
+| Bloque | Rol |
+|---|---|
+| Banco de registros | Lectura/escritura con wrap de 8 bits (`0…255`) |
+| ALU | ADD/SUB/INC/DEC/AND/OR/XOR/CMP sobre TA/TB; actualiza flags según la ISA |
+| Unidad de control | Micro-pasos: fetch F1–F6, decode, execute; un clic = un micro-paso |
+| Buses | Dirección interna 9 bits, dirección externa 8 bits, datos 8 bits, High-Z |
+| Palabra de control | 27 señales `En_*` / `Ld_*` / Mem / IO + pulso CLK |
+
+Detalle de la hoja `ISA` y del panel Simulator: módulos `modISA`, `modPanelCPU`, `modControlUnit`.
 
 ## 3. Conjunto de instrucciones (ISA)
 
-_Pendiente._
+Fuente de verdad: [`src/modISA.bas`](src/modISA.bas) y [`docs/ISA.md`](docs/ISA.md). Resumen:
+
+| Opcode | Mnemonic | Formato | Flags | Descripción |
+|---|---|---|---|---|
+| `0x00` | NOP | — | - | No hace nada |
+| `0x01` | MOV | RI | - | r ← imm |
+| `0x02` | MOV | RR | - | r ← r2 |
+| `0x03` | LOAD | RM | - | r ← M[addr] |
+| `0x04` | STORE | MR | - | M[addr] ← r |
+| `0x05`/`0x06` | ADD | RR / RI | Z C S | r ← r + op |
+| `0x07`/`0x08` | SUB | RR / RI | Z C S | r ← r − op |
+| `0x09`/`0x0A` | INC / DEC | R | Z S | r ← r ± 1 |
+| `0x0B`/`0x0C` | CMP | RR / RI | Z C S | resta solo flags |
+| `0x0D`–`0x0F` | AND / OR / XOR | RR | Z S | lógica bit a bit |
+| `0x10`–`0x14` | JMP / JZ / JNZ / JC / JS | A | - | saltos (condicionales usan flags) |
+| `0x15` / `0x16` | IN / OUT | RK / LR | - | teclado / LCD |
+| `0x1F` | HLT | — | - | detiene Run |
 
 ## 4. Formato de instrucción
 
-_Pendiente._
+Instrucción fija de **2 bytes**:
+
+```
+Byte 0: [ opcode: 5 | reg: 2 | A8: 1 ]
+Byte 1: [ operand: 8 ]
+```
+
+- **reg** = destino (origen en STORE/OUT).
+- **A8 + operand** = dirección virtual de 9 bits (`0x000`–`0x1FF`) o inmediato 0–255.
+- En formatos RR el operando bajo lleva el registro fuente en los 2 bits bajos.
 
 ## 5. Buses del sistema y buffers tri-estado
 
-_Pendiente._
+| Bus | Ancho | Quién conduce | Uso |
+|---|---|---|---|
+| Dirección **interna** | 9 bits | PC o campo addr de IR (`En_PC` / `En_IR_A`) | PC/IR → MAR (virtual) |
+| Dirección **externa** | 8 bits | MMU (PADDR) | acceso a caché / RAM / I/O |
+| Datos | 8 bits | un solo `En_*` a la vez | regs ↔ MDR ↔ memoria / KBD / LCD |
+| Control | 27 bits + CLK | Unidad de control | señales del micro-paso |
+
+Sin conductor activo el bus vale **High-Z** (`-1`) y el buffer se pinta gris. Un segundo conductor en el mismo micro-paso lanza *Bus collision*.
+
+```mermaid
+flowchart LR
+  subgraph CPU
+    PC --> IntAddr[Bus dir. interna 9b]
+    IR --> IntAddr
+    IntAddr --> MAR
+    REGS[AX..DX] --> DataBus[Bus datos 8b]
+    MDR --> DataBus
+    ALU --> DataBus
+    DataBus --> REGS
+    DataBus --> MDR
+  end
+  MAR --> MMU --> ExtAddr[Bus dir. externa 8b]
+  ExtAddr --> MEM[Caché / RAM / IO]
+  MEM --> DataBus
+  KBD --> DataBus
+  DataBus --> LCD
+```
 
 ## 6. Palabra de control
 
-_Pendiente._
+27 señales (bit 0 = `En_PC` … bit 26 = `En_IR_D`). Tabla completa en la hoja `ISA` (generada por `PaintControlWordOnISA`) y en `modControlWord`.
+
+**Reglas de validación** (cada micro-paso, `ValidateControlWord`):
+
+1. Como máximo **un** conductor de datos: entre `En_MDR`, `En_IR_D`, `En_AX`…`En_DX`, `En_ALU`, `En_KBD`.
+2. Como máximo **un** conductor de dirección: entre `En_PC`, `En_IR_A`.
+3. Como máximo **un** acceso externo: `Mem_R + Mem_W + IO_R + IO_W ≤ 1`.
+
+Varios `Ld_*` pueden estar activos a la vez (varios receptores del mismo valor).
 
 ## 7. Ciclo de instrucción
 
-_Pendiente._
+```mermaid
+flowchart LR
+  F1[F1 PC to MAR] --> F2[F2 M to MDR]
+  F2 --> F3[F3 MDR to IR hi]
+  F3 --> F4[F4 PC to MAR]
+  F4 --> F5[F5 M to MDR]
+  F5 --> F6[F6 MDR to IR lo]
+  F6 --> D[Decode]
+  D --> E[Execute]
+  E --> F1
+```
+
+- **STEP** = un micro-paso (`StepMicro`).
+- **RUN** = bucle a la velocidad del slider hasta **HLT** o Pause.
+- Cada micro-paso escribe una fila en la hoja **Log** (reloj, palabra de control, transferencia).
 
 ## 8. Mapa de memoria
 
