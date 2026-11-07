@@ -340,6 +340,11 @@ Public Sub BuildISASheet()
     ws.Range("B6:J" & lastRow).Columns.AutoFit   ' fit to the tables, not to the title
     ws.Columns("C").ColumnWidth = 16           ' the long format line in C8 overflows to the right
     Application.ScreenUpdating = True
+
+    ' A7: append 27-signal control word table + rules (no-op stub until modControlWord lands)
+    On Error Resume Next
+    PaintControlWordOnISA
+    On Error GoTo 0
 End Sub
 
 ' Row of an opcode in the ISA table (0 if the opcode is not used).
