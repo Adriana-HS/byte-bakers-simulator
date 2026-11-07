@@ -19,13 +19,7 @@ Option Explicit
 Public MicroStep As Integer   ' A8
 Public RunFlag As Boolean     ' A8
 
-' --- modKeyboard / modLCD (#28/#29 / M5+M6) ---
-Public Sub BuildIOPanel(ByVal ws As Worksheet)
-End Sub
-
-Public Sub RefreshKeyboard()
-End Sub
-
+' --- modLCD (#29 / M6) — BuildIOPanel + RefreshKeyboard live in modKeyboard (#28) ---
 Public Sub RefreshLCD()
 End Sub
 
