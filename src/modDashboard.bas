@@ -500,42 +500,83 @@ Private Function StatusText() As String
 End Function
 
 ' =====================================================================
-' Test_Dashboard - Immediate-window self-check for M3.
+' Test_Dashboard - Immediate-window self-check for M3 / M14.
 ' Returns failed checks (0 = ALL OK).
 ' =====================================================================
 Public Function Test_Dashboard() As Long
     Dim fails As Long
     Dim ws As Worksheet
     Dim savedDelay As Long
+    Dim savedRun As Boolean
+    Dim clk0 As Long
 
     savedDelay = AnimDelay
-    On Error Resume Next
+    savedRun = RunFlag
+    ' A check that raises (missing shape, bad property) counts as a failure
+    On Error GoTo Broken
+    ThisWorkbook.Worksheets(SH_SIM).Activate
     BuildDashboard
-    fails = fails + DashCheck("BuildDashboard no raise", Err.Number = 0)
-    Err.Clear
 
     Set ws = ThisWorkbook.Worksheets(SH_SIM)
     fails = fails + DashCheck("Simulator sheet exists", Not ws Is Nothing)
-    fails = fails + DashCheck("btn_Step exists", ShapeExists(ws, "btn_Step"))
-    fails = fails + DashCheck("btn_Run exists", ShapeExists(ws, "btn_Run"))
-    fails = fails + DashCheck("btn_Pause exists", ShapeExists(ws, "btn_Pause"))
-    fails = fails + DashCheck("btn_Reset exists", ShapeExists(ws, "btn_Reset"))
+    fails = fails + DashCheck("buttons exist", ShapeExists(ws, "btn_Step") And ShapeExists(ws, "btn_Run") _
+        And ShapeExists(ws, "btn_Pause") And ShapeExists(ws, "btn_Reset") _
+        And ShapeExists(ws, "btn_Demo") And ShapeExists(ws, "btn_Present"))
     fails = fails + DashCheck("scr_Speed exists", ShapeExists(ws, "scr_Speed"))
     fails = fails + DashCheck("lbl_Clock exists", ShapeExists(ws, "lbl_Clock"))
 
+    ' Frames
+    fails = fails + DashCheck("frames use CLR_SURFACE + 1 pt CLR_BORDER", FramesStyled(ws))
+    fails = fails + DashCheck("frame headers have no task codes", HeadersClean(ws))
+    If Len(LogoPath()) > 0 Then
+        fails = fails + DashCheck("logo is the real PNG", ws.Shapes("img_Logo").Type = msoPicture)
+    End If
+    fails = fails + DashCheck("legend shows 6 states", LegendComplete(ws))
+
+    ' Speed: slider and presets agree
     AnimDelay = 350
     ws.Shapes("scr_Speed").ControlFormat.Value = 350
     SpeedChanged
     fails = fails + DashCheck("speed slider -> AnimDelay", AnimDelay = 350)
+    fails = fails + DashCheck("no preset lit at 350 ms", ws.Shapes("spd_Normal").Fill.ForeColor.RGB = CLR_SURFACE)
+    BtnSpeedFast
+    fails = fails + DashCheck("FAST preset -> 60 ms + slider", AnimDelay = SPEED_FAST _
+        And ws.Shapes("scr_Speed").ControlFormat.Value = SPEED_FAST _
+        And ws.Shapes("spd_Fast").Fill.ForeColor.RGB = CLR_LOAD)
+    BtnSpeedInstant
+    fails = fails + DashCheck("INSTANT preset -> 0 ms", AnimDelay = 0 _
+        And ws.Shapes("scr_Speed").ControlFormat.Value = 0)
+
+    ' STEP / RESET refused while RUN is active
+    clk0 = Clock
+    RunFlag = True
+    BtnStep
+    fails = fails + DashCheck("STEP while RUN shows Pause first", _
+        InStr(1, ws.Shapes("lbl_Clock").TextFrame2.TextRange.Text, "Pause first") > 0 And Clock = clk0)
+    BtnReset
+    fails = fails + DashCheck("RESET while RUN is refused", Clock = clk0)
+    fails = fails + DashCheck("button color restored", ws.Shapes("btn_Reset").Fill.ForeColor.RGB = CLR_HIGHZ)
+    RunFlag = savedRun
+
+    ' Readability and layout
+    fails = fails + DashCheck("dashboard text is " & MIN_PT & " pt or larger", MinFontOk(ws))
+    fails = fails + DashCheck("dashboard labels overlap nothing", NoOverlaps(ws))
+    fails = fails + DashCheck("panels stay inside their frames", PanelsInsideFrames(ws))
+    FitToScreen
+    fails = fails + DashCheck("whole layout visible (fitted zoom)", _
+        Not Intersect(ActiveWindow.VisibleRange, LastLayoutCell(ws).Offset(-1, -1)) Is Nothing)
 
     RefreshAll
-    fails = fails + DashCheck("RefreshAll no raise", Err.Number = 0)
-    Err.Clear
     On Error GoTo 0
 
-    AnimDelay = savedDelay
+    RunFlag = savedRun
+    SetSpeed savedDelay
     Debug.Print IIf(fails = 0, "Test_Dashboard: ALL OK", "Test_Dashboard: " & fails & " FAIL(S)")
     Test_Dashboard = fails
+    Exit Function
+Broken:
+    fails = fails + DashCheck("no runtime error (" & Err.Number & " " & Err.Description & ")", False)
+    Resume Next
 End Function
 
 Private Function ShapeExists(ByVal ws As Worksheet, ByVal nm As String) As Boolean
@@ -549,4 +590,113 @@ End Function
 Private Function DashCheck(ByVal what As String, ByVal passed As Boolean) As Long
     Debug.Print IIf(passed, "  OK    ", "  FAIL  ") & what
     DashCheck = IIf(passed, 0, 1)
+End Function
+
+Private Function FramesStyled(ByVal ws As Worksheet) As Boolean
+    Dim k As Variant
+    FramesStyled = True
+    For Each k In Array("CPU", "MEM", "IO", "CTRL")
+        With ws.Shapes("frm_" & k)
+            If .Fill.ForeColor.RGB <> CLR_SURFACE Or .Line.ForeColor.RGB <> CLR_BORDER _
+                Or .Line.Weight <> 1 Or Not .Line.Visible Then FramesStyled = False
+        End With
+    Next k
+End Function
+
+Private Function HeadersClean(ByVal ws As Worksheet) As Boolean
+    Dim k As Variant
+    Dim t As String
+    HeadersClean = True
+    For Each k In Array("CPU", "MEM", "IO", "CTRL")
+        t = ws.Shapes("hdr_" & k).TextFrame2.TextRange.Text
+        If t Like "*(*" Or t Like "*[AKM]#*" Then HeadersClean = False
+    Next k
+End Function
+
+Private Function LegendComplete(ByVal ws As Worksheet) As Boolean
+    Dim k As Variant
+    LegendComplete = True
+    For Each k In Array("idle", "active", "load", "hit", "miss", "fault")
+        If Not ShapeExists(ws, "leg_sw_" & k) Or Not ShapeExists(ws, "leg_" & k) Then LegendComplete = False
+    Next k
+End Function
+
+' Shapes this module draws (everything else belongs to a panel).
+Private Function IsDashShape(ByVal nm As String) As Boolean
+    Select Case True
+        Case nm = "lbl_Title", nm = "lbl_Clock", nm = "img_Logo", nm = "lbl_Speed", nm = "scr_Speed"
+            IsDashShape = True
+        Case nm Like "hdr_*", nm Like "spd_*", nm Like "leg_*", nm Like "frm_*"
+            IsDashShape = True
+        Case nm = "btn_Step", nm = "btn_Run", nm = "btn_Pause", nm = "btn_Reset", _
+             nm = "btn_Demo", nm = "btn_Present"
+            IsDashShape = True
+    End Select
+End Function
+
+Private Function IsTransient(ByVal nm As String) As Boolean
+    IsTransient = nm Like "anim_*" Or nm Like "demo_*" Or nm Like "tst_*" Or nm Like "ev_*"
+End Function
+
+Private Function MinFontOk(ByVal ws As Worksheet) As Boolean
+    Dim s As Shape
+    MinFontOk = True
+    For Each s In ws.Shapes
+        If IsDashShape(s.Name) And s.Type = msoAutoShape Then
+            If s.TextFrame2.HasText Then
+                If s.TextFrame2.TextRange.Font.Size < MIN_PT Then
+                    Debug.Print "    small text: " & s.Name
+                    MinFontOk = False
+                End If
+            End If
+        End If
+    Next s
+End Function
+
+' Every dashboard label/control is clear of every other shape (frames excluded).
+Private Function NoOverlaps(ByVal ws As Worksheet) As Boolean
+    Dim a As Shape, b As Shape
+    NoOverlaps = True
+    For Each a In ws.Shapes
+        If IsDashShape(a.Name) And Not a.Name Like "frm_*" Then
+            For Each b In ws.Shapes
+                If b.Name <> a.Name And Not b.Name Like "frm_*" And Not IsTransient(b.Name) Then
+                    If Overlap(a, b) Then
+                        Debug.Print "    overlap: " & a.Name & " / " & b.Name
+                        NoOverlaps = False
+                    End If
+                End If
+            Next b
+        End If
+    Next a
+End Function
+
+' A panel shape whose center is in a frame must fit entirely in it.
+Private Function PanelsInsideFrames(ByVal ws As Worksheet) As Boolean
+    Dim s As Shape, f As Shape
+    Dim k As Variant
+    Dim cx As Single, cy As Single
+    PanelsInsideFrames = True
+    For Each s In ws.Shapes
+        If Not IsDashShape(s.Name) And Not IsTransient(s.Name) Then
+            cx = s.Left + s.Width / 2
+            cy = s.Top + s.Height / 2
+            For Each k In Array("CPU", "MEM", "IO", "CTRL")
+                Set f = ws.Shapes("frm_" & k)
+                If cx > f.Left And cx < f.Left + f.Width And cy > f.Top And cy < f.Top + f.Height Then
+                    If s.Left < f.Left Or s.Top < f.Top + HDR_H / 2 Or _
+                       s.Left + s.Width > f.Left + f.Width Or s.Top + s.Height > f.Top + f.Height Then
+                        Debug.Print "    outside frm_" & k & ": " & s.Name
+                        PanelsInsideFrames = False
+                    End If
+                End If
+            Next k
+        End If
+    Next s
+End Function
+
+Private Function Overlap(ByVal a As Shape, ByVal b As Shape) As Boolean
+    Const TOL As Single = 0.5
+    Overlap = a.Left < b.Left + b.Width - TOL And b.Left < a.Left + a.Width - TOL And _
+              a.Top < b.Top + b.Height - TOL And b.Top < a.Top + a.Height - TOL
 End Function
