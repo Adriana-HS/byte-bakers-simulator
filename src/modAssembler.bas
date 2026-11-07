@@ -288,23 +288,29 @@ Private Sub AddErr(ByVal lineNo As Long, ByVal msg As String)
     AsmErrors.Add "Line " & lineNo & ": " & msg
 End Sub
 
-' Soft UX: pastel status strip + first error on Programs sheet (never crashes).
+' Status strip + first error on Programs sheet (never crashes).
+' Brand palette only: navy chip, cream strip, OK/ERROR word plus a
+' green or red left edge so the state does not depend on color alone.
 Private Sub PaintAsmStatus(ByVal ok As Boolean)
     Dim ws As Worksheet
     Dim banner As Range
     Dim detail As Range
     Dim tip As String
+    Dim ink As Long
+    Dim edge As Long
     On Error Resume Next
     Set ws = ThisWorkbook.Worksheets(SH_PROG)
     If ws Is Nothing Then Exit Sub
 
-    ' Soft lavender chrome so the Programs sheet feels designed, not raw grid
     ws.Range("A1").Value = "ASSEMBLER"
     ws.Range("A1").Font.Name = "Segoe UI"
     ws.Range("A1").Font.Size = 12
     ws.Range("A1").Font.Bold = True
-    ws.Range("A1").Font.Color = RGB(90, 80, 120)
-    ws.Range("A1").Interior.Color = RGB(232, 228, 245)   ' lilac
+    ws.Range("A1").Font.Color = CLR_TEXT
+    ws.Range("A1").Interior.Color = CLR_BG
+    ws.Range("A1").HorizontalAlignment = xlLeft
+    ws.Range("A1").IndentLevel = 1
+    If ws.Columns("A").ColumnWidth < 15 Then ws.Columns("A").ColumnWidth = 15
 
     Set banner = ws.Range("B2:F2")
     banner.Merge
@@ -324,15 +330,12 @@ Private Sub PaintAsmStatus(ByVal ok As Boolean)
     detail.HorizontalAlignment = xlLeft
 
     If ok Then
-        banner.Interior.Color = RGB(210, 235, 222)   ' mint
-        banner.Font.Color = RGB(40, 90, 70)
+        ink = CLR_BG                 ' navy on cream 12.7:1
+        edge = CLR_HIT
         tip = "Ready to load into memory"
-        detail.Value = tip
-        detail.Interior.Color = RGB(236, 245, 240)
-        detail.Font.Color = RGB(70, 110, 90)
     Else
-        banner.Interior.Color = RGB(255, 228, 225)   ' soft rose
-        banner.Font.Color = RGB(120, 50, 50)
+        ink = CLR_FAULT              ' dark red on cream 6.2:1
+        edge = CLR_MISS
         If Not AsmErrors Is Nothing Then
             If AsmErrors.Count > 0 Then
                 tip = CStr(AsmErrors(1))
@@ -342,10 +345,18 @@ Private Sub PaintAsmStatus(ByVal ok As Boolean)
         Else
             tip = "Fix the source and assemble again"
         End If
-        detail.Value = tip
-        detail.Interior.Color = RGB(255, 242, 238)
-        detail.Font.Color = RGB(130, 70, 70)
     End If
+    detail.Value = tip
+
+    banner.Interior.Color = CLR_TEXT
+    detail.Interior.Color = CLR_TEXT
+    banner.Font.Color = ink
+    detail.Font.Color = ink
+    With ws.Range("B2:B3").Borders(xlEdgeLeft)
+        .LineStyle = xlContinuous
+        .Weight = xlThick
+        .Color = edge
+    End With
     On Error GoTo 0
 End Sub
 
