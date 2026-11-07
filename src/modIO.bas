@@ -98,3 +98,61 @@ Private Function IoGlyph(ByVal v As Integer) As String
     End If
 End Function
 
+Public Function Test_IO() As Long
+    Dim fails As Long
+    Dim v As Integer
+    Dim saved As Long
+    Dim ws As Worksheet
+    Dim s As Shape
+    Dim cwIn As Long
+    Dim cwOut As Long
+
+    saved = AnimDelay
+    AnimDelay = 0
+
+    KbdInit
+    ClearLCD
+    KbdPress Asc("F")
+    v = IoRead(R_AX)
+    cwIn = IoLastCW()
+    fails = fails + IoCheck("IN returns F", v = Asc("F") And CPU.R(R_AX) = Asc("F"))
+    fails = fails + IoCheck("IN signals", _
+        (cwIn And (SIG_IO_R Or SIG_EN_KBD Or SIG_LD_AX)) = (SIG_IO_R Or SIG_EN_KBD Or SIG_LD_AX))
+    fails = fails + IoCheck("IN memory stays 0", (cwIn And (SIG_MEM_R Or SIG_MEM_W)) = 0)
+    fails = fails + IoCheck("IN word is legal", Len(ValidateControlWord(cwIn)) = 0)
+    fails = fails + IoCheck("queue consumed", RAM(KBD_COUNT) = 0)
+
+    IoWrite CPU.R(R_AX)
+    cwOut = IoLastCW()
+    fails = fails + IoCheck("OUT latched F", RAM(LCD_BASE) = Asc("F"))
+    fails = fails + IoCheck("OUT signals", _
+        (cwOut And (SIG_EN_AX Or SIG_IO_W Or SIG_LD_LCD)) = (SIG_EN_AX Or SIG_IO_W Or SIG_LD_LCD))
+    fails = fails + IoCheck("OUT memory stays 0", (cwOut And (SIG_MEM_R Or SIG_MEM_W)) = 0)
+    fails = fails + IoCheck("OUT word is legal", Len(ValidateControlWord(cwOut)) = 0)
+
+    KbdInit
+    v = IoRead(R_AX)
+    fails = fails + IoCheck("empty IN is 0", v = 0)
+    fails = fails + IoCheck("empty IN waits", KbdStatusText = "waiting for key")
+
+    Set ws = ThisWorkbook.Worksheets(SH_SIM)
+    LcdBuild ws
+    Demo_LetterF
+    fails = fails + IoCheck("demo F in AX and LCD", CPU.R(R_AX) = Asc("F") And RAM(LCD_BASE) = Asc("F"))
+    fails = fails + IoCheck("demo queue empty", RAM(KBD_COUNT) = 0)
+    On Error Resume Next
+    Set s = ws.Shapes("lcd_c0")
+    On Error GoTo 0
+    If Not s Is Nothing Then
+        fails = fails + IoCheck("demo shows F", s.TextFrame2.TextRange.Text = "F")
+    End If
+
+    AnimDelay = saved
+    Debug.Print IIf(fails = 0, "Test_IO: ALL OK", "Test_IO: " & fails & " FAIL(S)")
+    Test_IO = fails
+End Function
+
+Private Function IoCheck(ByVal what As String, ByVal passed As Boolean) As Long
+    Debug.Print IIf(passed, "  OK    ", "  FAIL  ") & what
+    IoCheck = IIf(passed, 0, 1)
+End Function
