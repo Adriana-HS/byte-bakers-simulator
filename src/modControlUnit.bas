@@ -103,21 +103,21 @@ End Sub
 Private Sub DoFetch(ByVal t As Integer)
     Select Case t
         Case 1, 4
-            Emit SIG_EN_PC Or SIG_LD_MAR, "PC → MAR (addr bus)"
+            Emit SIG_EN_PC Or SIG_LD_MAR, "PC -> MAR (addr bus)"
             DriveIntAddrBus "PC", CPU.PC
             SetMAR CPU.PC
         Case 2, 5
-            Emit SIG_MEM_R Or SIG_LD_MDR, "M[MAR] → MDR (fetch)"
+            Emit SIG_MEM_R Or SIG_LD_MDR, "M[MAR] -> MDR (fetch)"
             SetMDR MemRead(CPU.MAR, True)
             DriveExtAddrBus CPU.PADDR
             DriveDataBus "MEM", CPU.MDR, False
         Case 3
-            Emit SIG_EN_MDR Or SIG_LD_IR Or SIG_INC_PC, "MDR → IR (hi), PC+1"
+            Emit SIG_EN_MDR Or SIG_LD_IR Or SIG_INC_PC, "MDR -> IR (hi), PC+1"
             DriveDataBus "MDR", CPU.MDR, True
             SetIR CLng(CPU.MDR) * 256
             IncPC
         Case 6
-            Emit SIG_EN_MDR Or SIG_LD_IR Or SIG_INC_PC, "MDR → IR (lo), PC+1"
+            Emit SIG_EN_MDR Or SIG_LD_IR Or SIG_INC_PC, "MDR -> IR (lo), PC+1"
             DriveDataBus "MDR", CPU.MDR, True
             SetIR (CPU.IR And &HFF00&) Or (CPU.MDR And BYTE_MAX)
             IncPC
@@ -144,14 +144,14 @@ Private Function DoExecute(ByVal t As Integer) As Boolean
             DoExecute = True
 
         Case OP_MOV_RI
-            Emit SIG_EN_IR_D Or SIG_LD_REG(curReg), "IR(imm) → " & RegName(curReg)
+            Emit SIG_EN_IR_D Or SIG_LD_REG(curReg), "IR(imm) -> " & RegName(curReg)
             DriveDataBus "IR", curOperand And BYTE_MAX, True
             SetReg curReg, curOperand And BYTE_MAX
             DoExecute = True
 
         Case OP_MOV_RR
             src = curOperand And 3
-            Emit SIG_EN_REG(src) Or SIG_LD_REG(curReg), RegName(src) & " → " & RegName(curReg)
+            Emit SIG_EN_REG(src) Or SIG_LD_REG(curReg), RegName(src) & " -> " & RegName(curReg)
             DriveDataBus RegName(src), GetReg(src), True
             SetReg curReg, GetReg(src)
             DoExecute = True
@@ -159,16 +159,16 @@ Private Function DoExecute(ByVal t As Integer) As Boolean
         Case OP_LOAD
             Select Case t
                 Case 1
-                    Emit SIG_EN_IR_A Or SIG_LD_MAR, "IR(addr) → MAR"
+                    Emit SIG_EN_IR_A Or SIG_LD_MAR, "IR(addr) -> MAR"
                     DriveIntAddrBus "IR", curOperand
                     SetMAR curOperand
                 Case 2
-                    Emit SIG_MEM_R Or SIG_LD_MDR, "M[MAR] → MDR (data)"
+                    Emit SIG_MEM_R Or SIG_LD_MDR, "M[MAR] -> MDR (data)"
                     SetMDR MemRead(CPU.MAR, False)
                     DriveExtAddrBus CPU.PADDR
                     DriveDataBus "MEM", CPU.MDR, False
                 Case 3
-                    Emit SIG_EN_MDR Or SIG_LD_REG(curReg), "MDR → " & RegName(curReg)
+                    Emit SIG_EN_MDR Or SIG_LD_REG(curReg), "MDR -> " & RegName(curReg)
                     DriveDataBus "MDR", CPU.MDR, True
                     SetReg curReg, CPU.MDR
                     DoExecute = True
@@ -177,15 +177,15 @@ Private Function DoExecute(ByVal t As Integer) As Boolean
         Case OP_STORE
             Select Case t
                 Case 1
-                    Emit SIG_EN_IR_A Or SIG_LD_MAR, "IR(addr) → MAR"
+                    Emit SIG_EN_IR_A Or SIG_LD_MAR, "IR(addr) -> MAR"
                     DriveIntAddrBus "IR", curOperand
                     SetMAR curOperand
                 Case 2
-                    Emit SIG_EN_REG(curReg) Or SIG_LD_MDR, RegName(curReg) & " → MDR"
+                    Emit SIG_EN_REG(curReg) Or SIG_LD_MDR, RegName(curReg) & " -> MDR"
                     DriveDataBus RegName(curReg), GetReg(curReg), True
                     SetMDR GetReg(curReg)
                 Case 3
-                    Emit SIG_EN_MDR Or SIG_MEM_W, "MDR → M[MAR]"
+                    Emit SIG_EN_MDR Or SIG_MEM_W, "MDR -> M[MAR]"
                     DriveExtAddrBus CPU.PADDR
                     DriveDataBus "MDR", CPU.MDR, False
                     MemWrite CPU.MAR, CPU.MDR
@@ -195,21 +195,21 @@ Private Function DoExecute(ByVal t As Integer) As Boolean
         Case OP_ADD_RR, OP_SUB_RR, OP_AND, OP_OR, OP_XOR, OP_CMP_RR
             Select Case t
                 Case 1
-                    Emit SIG_EN_REG(curReg) Or SIG_LD_TA, RegName(curReg) & " → TA"
+                    Emit SIG_EN_REG(curReg) Or SIG_LD_TA, RegName(curReg) & " -> TA"
                     DriveDataBus RegName(curReg), GetReg(curReg), True
                     CPU.TA = GetReg(curReg)
                 Case 2
                     src = curOperand And 3
-                    Emit SIG_EN_REG(src) Or SIG_LD_TB, RegName(src) & " → TB"
+                    Emit SIG_EN_REG(src) Or SIG_LD_TB, RegName(src) & " -> TB"
                     DriveDataBus RegName(src), GetReg(src), True
                     CPU.TB = GetReg(src)
                 Case 3
                     r = AluExecute(curOp)
                     If curOp = OP_CMP_RR Then
-                        Emit SIG_EN_ALU Or SIG_LD_FLAGS, "ALU → FLAGS (CMP)"
+                        Emit SIG_EN_ALU Or SIG_LD_FLAGS, "ALU -> FLAGS (CMP)"
                     Else
                         Emit SIG_EN_ALU Or SIG_LD_REG(curReg) Or SIG_LD_FLAGS, _
-                            "ALU → " & RegName(curReg)
+                            "ALU -> " & RegName(curReg)
                         DriveDataBus "ALU", r, True
                         SetReg curReg, r
                     End If
@@ -219,20 +219,20 @@ Private Function DoExecute(ByVal t As Integer) As Boolean
         Case OP_ADD_RI, OP_SUB_RI, OP_CMP_RI
             Select Case t
                 Case 1
-                    Emit SIG_EN_REG(curReg) Or SIG_LD_TA, RegName(curReg) & " → TA"
+                    Emit SIG_EN_REG(curReg) Or SIG_LD_TA, RegName(curReg) & " -> TA"
                     DriveDataBus RegName(curReg), GetReg(curReg), True
                     CPU.TA = GetReg(curReg)
                 Case 2
-                    Emit SIG_EN_IR_D Or SIG_LD_TB, "IR(imm) → TB"
+                    Emit SIG_EN_IR_D Or SIG_LD_TB, "IR(imm) -> TB"
                     DriveDataBus "IR", curOperand And BYTE_MAX, True
                     CPU.TB = curOperand And BYTE_MAX
                 Case 3
                     r = AluExecute(curOp)
                     If curOp = OP_CMP_RI Then
-                        Emit SIG_EN_ALU Or SIG_LD_FLAGS, "ALU → FLAGS (CMP)"
+                        Emit SIG_EN_ALU Or SIG_LD_FLAGS, "ALU -> FLAGS (CMP)"
                     Else
                         Emit SIG_EN_ALU Or SIG_LD_REG(curReg) Or SIG_LD_FLAGS, _
-                            "ALU → " & RegName(curReg)
+                            "ALU -> " & RegName(curReg)
                         DriveDataBus "ALU", r, True
                         SetReg curReg, r
                     End If
@@ -242,21 +242,21 @@ Private Function DoExecute(ByVal t As Integer) As Boolean
         Case OP_INC, OP_DEC
             Select Case t
                 Case 1
-                    Emit SIG_EN_REG(curReg) Or SIG_LD_TA, RegName(curReg) & " → TA"
+                    Emit SIG_EN_REG(curReg) Or SIG_LD_TA, RegName(curReg) & " -> TA"
                     DriveDataBus RegName(curReg), GetReg(curReg), True
                     CPU.TA = GetReg(curReg)
                     CPU.TB = 0
                 Case 2
                     r = AluExecute(curOp)
                     Emit SIG_EN_ALU Or SIG_LD_REG(curReg) Or SIG_LD_FLAGS, _
-                        "ALU → " & RegName(curReg)
+                        "ALU -> " & RegName(curReg)
                     DriveDataBus "ALU", r, True
                     SetReg curReg, r
                     DoExecute = True
             End Select
 
         Case OP_JMP
-            Emit SIG_EN_IR_A Or SIG_LD_PC, "IR(addr) → PC"
+            Emit SIG_EN_IR_A Or SIG_LD_PC, "IR(addr) -> PC"
             DriveIntAddrBus "IR", curOperand
             SetPC curOperand
             DoExecute = True
@@ -270,7 +270,7 @@ Private Function DoExecute(ByVal t As Integer) As Boolean
                 Case OP_JS: taken = CPU.SF
             End Select
             If taken Then
-                Emit SIG_EN_IR_A Or SIG_LD_PC, "IR(addr) → PC (taken)"
+                Emit SIG_EN_IR_A Or SIG_LD_PC, "IR(addr) -> PC (taken)"
                 DriveIntAddrBus "IR", curOperand
                 SetPC curOperand
             Else
@@ -280,13 +280,13 @@ Private Function DoExecute(ByVal t As Integer) As Boolean
 
         Case OP_IN
             r = IoRead(curReg)
-            Emit SIG_IO_R Or SIG_EN_KBD Or SIG_LD_REG(curReg), "KBD → " & RegName(curReg)
+            Emit SIG_IO_R Or SIG_EN_KBD Or SIG_LD_REG(curReg), "KBD -> " & RegName(curReg)
             DriveDataBus "KBD", r, False
             SetReg curReg, r
             DoExecute = True
 
         Case OP_OUT
-            Emit SIG_EN_REG(curReg) Or SIG_IO_W Or SIG_LD_LCD, RegName(curReg) & " → LCD"
+            Emit SIG_EN_REG(curReg) Or SIG_IO_W Or SIG_LD_LCD, RegName(curReg) & " -> LCD"
             DriveDataBus RegName(curReg), GetReg(curReg), False
             IoWrite GetReg(curReg)
             DoExecute = True
@@ -355,7 +355,7 @@ Public Function Test_ControlUnit() As Long
     ' Program at vaddr 0: MOV AX, 7 ; MOV BX, 3 ; ADD AX, BX ; HLT
     ' Each instr = 2 bytes in virtual memory / through MemRead
     PokeInstr 0, Encode(OP_MOV_RI, R_AX, 7)
-    PokeInstr 2, Encode(OP_MOV_RR, R_BX, R_AX)   ' BX <- AX (7) — simpler path
+    PokeInstr 2, Encode(OP_MOV_RR, R_BX, R_AX)   ' BX <- AX (7) - simpler path
     ' Better catalog-like: MOV BX,3 then ADD
     PokeInstr 2, Encode(OP_MOV_RI, R_BX, 3)
     PokeInstr 4, Encode(OP_ADD_RR, R_AX, R_BX)
