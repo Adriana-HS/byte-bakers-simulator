@@ -10,13 +10,7 @@ Attribute VB_Name = "modStubs_Misael"
 ' =====================================================================
 Option Explicit
 
-' --- modKeyboard / modLCD (#28/#29 / M5+M6) ---
-Public Sub BuildIOPanel(ByVal ws As Worksheet)
-End Sub
-
-Public Sub RefreshKeyboard()
-End Sub
-
+' --- modLCD (#29 / M6). BuildIOPanel + RefreshKeyboard live in modKeyboard (#28). ---
 Public Sub RefreshLCD()
 End Sub
 
@@ -28,13 +22,8 @@ End Function
 Public Sub IoWrite(ByVal v As Integer)
 End Sub
 
-' --- A9 / K10 bridges (A8 StepMicro/RunProgram/MicroStep → modControlUnit) ---
-Public Sub BuildCPUPanel(ByVal ws As Worksheet)
-End Sub
-
-Public Sub RefreshCPUPanel()
-End Sub
-
+' --- K10. A8 StepMicro/RunProgram/MicroStep live in modControlUnit. ---
+' --- A9 BuildCPUPanel/RefreshCPUPanel live in modPanelCPU. ---
 Public Sub BuildMiniMemory(ByVal ws As Worksheet)
 End Sub
 ' RefreshMemoryPanel / RefreshStats already exist in modStubs_Karen.

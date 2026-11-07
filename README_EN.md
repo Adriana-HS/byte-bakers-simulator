@@ -54,27 +54,110 @@ _Pending — public link to the `ByteBakers.xlsm` workbook (release v1.0.0)._
 
 ## 2. CPU architecture
 
-_Pending._
+An **8-bit** CPU with four general-purpose registers (**AX, BX, CX, DX**), control registers (**PC, IR, MAR, MDR, PADDR**), and ALU temporaries (**TA, TB**). Flags: **ZF** (zero), **CF** (carry/borrow), **SF** (sign, bit 7).
+
+| Block | Role |
+|---|---|
+| Register file | Read/write with 8-bit wrap (`0…255`) |
+| ALU | ADD/SUB/INC/DEC/AND/OR/XOR/CMP on TA/TB; updates flags per the ISA |
+| Control unit | Micro-steps: fetch F1–F6, decode, execute; one click = one micro-step |
+| Buses | 9-bit internal address, 8-bit external address, 8-bit data, High-Z |
+| Control word | 27 `En_*` / `Ld_*` / Mem / IO signals plus the CLK pulse |
+
+See also the workbook `ISA` sheet and Simulator panel (`modISA`, `modPanelCPU`, `modControlUnit`).
 
 ## 3. Instruction set (ISA)
 
-_Pending._
+Source of truth: [`src/modISA.bas`](src/modISA.bas) and [`docs/ISA.md`](docs/ISA.md). Summary:
+
+| Opcode | Mnemonic | Format | Flags | Description |
+|---|---|---|---|---|
+| `0x00` | NOP | — | - | No operation |
+| `0x01` | MOV | RI | - | r ← imm |
+| `0x02` | MOV | RR | - | r ← r2 |
+| `0x03` | LOAD | RM | - | r ← M[addr] |
+| `0x04` | STORE | MR | - | M[addr] ← r |
+| `0x05`/`0x06` | ADD | RR / RI | Z C S | r ← r + op |
+| `0x07`/`0x08` | SUB | RR / RI | Z C S | r ← r − op |
+| `0x09`/`0x0A` | INC / DEC | R | Z S | r ← r ± 1 |
+| `0x0B`/`0x0C` | CMP | RR / RI | Z C S | subtract for flags only |
+| `0x0D`–`0x0F` | AND / OR / XOR | RR | Z S | bitwise logic |
+| `0x10`–`0x14` | JMP / JZ / JNZ / JC / JS | A | - | jumps (conditionals use flags) |
+| `0x15` / `0x16` | IN / OUT | RK / LR | - | keyboard / LCD |
+| `0x1F` | HLT | — | - | stops Run |
 
 ## 4. Instruction format
 
-_Pending._
+Fixed **2-byte** instruction:
+
+```
+Byte 0: [ opcode: 5 | reg: 2 | A8: 1 ]
+Byte 1: [ operand: 8 ]
+```
+
+- **reg** is the destination (source for STORE/OUT).
+- **A8 + operand** forms a 9-bit virtual address (`0x000`–`0x1FF`) or an immediate 0–255.
+- In RR formats the low operand carries the source register in its bottom two bits.
 
 ## 5. System buses and tri-state buffers
 
-_Pending._
+| Bus | Width | Driver | Use |
+|---|---|---|---|
+| **Internal** address | 9 bits | PC or IR address field (`En_PC` / `En_IR_A`) | PC/IR → MAR (virtual) |
+| **External** address | 8 bits | MMU (PADDR) | cache / RAM / I/O access |
+| Data | 8 bits | exactly one `En_*` | regs ↔ MDR ↔ memory / KBD / LCD |
+| Control | 27 bits + CLK | Control unit | current micro-step signals |
+
+With no driver the bus holds **High-Z** (`-1`) and the buffer is painted gray. A second driver in the same micro-step raises *Bus collision*.
+
+```mermaid
+flowchart LR
+  subgraph CPU
+    PC --> IntAddr[Internal addr bus 9b]
+    IR --> IntAddr
+    IntAddr --> MAR
+    REGS[AX..DX] --> DataBus[Data bus 8b]
+    MDR --> DataBus
+    ALU --> DataBus
+    DataBus --> REGS
+    DataBus --> MDR
+  end
+  MAR --> MMU --> ExtAddr[External addr bus 8b]
+  ExtAddr --> MEM[Cache / RAM / IO]
+  MEM --> DataBus
+  KBD --> DataBus
+  DataBus --> LCD
+```
 
 ## 6. Control word
 
-_Pending._
+27 signals (bit 0 = `En_PC` … bit 26 = `En_IR_D`). Full table on the `ISA` sheet (`PaintControlWordOnISA`) and in `modControlWord`.
+
+**Validation rules** (every micro-step, `ValidateControlWord`):
+
+1. At most **one** data-bus driver among `En_MDR`, `En_IR_D`, `En_AX`…`En_DX`, `En_ALU`, `En_KBD`.
+2. At most **one** address-bus driver among `En_PC`, `En_IR_A`.
+3. At most **one** external access: `Mem_R + Mem_W + IO_R + IO_W ≤ 1`.
+
+Several `Ld_*` loads may be active together (multiple receivers of the same value).
 
 ## 7. Instruction cycle
 
-_Pending._
+```mermaid
+flowchart LR
+  F1[F1 PC to MAR] --> F2[F2 M to MDR]
+  F2 --> F3[F3 MDR to IR hi]
+  F3 --> F4[F4 PC to MAR]
+  F4 --> F5[F5 M to MDR]
+  F5 --> F6[F6 MDR to IR lo]
+  F6 --> D[Decode]
+  D --> E[Execute]
+  E --> F1
+```
+
+- **STEP** runs a single micro-step (`StepMicro`).
+- **RUN** loops at the slider speed until **HLT** or Pause.
+- Every micro-step appends a row on the **Log** sheet (clock, control word, transfer).
 
 ## 8. Memory map
 
