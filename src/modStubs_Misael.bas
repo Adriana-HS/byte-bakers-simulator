@@ -10,17 +10,10 @@ Attribute VB_Name = "modStubs_Misael"
 ' =====================================================================
 Option Explicit
 
-' --- modIO (#30 / M7) ---
-Public Function IoRead(ByVal destReg As Integer) As Integer
-    IoRead = 0
-End Function
-
-Public Sub IoWrite(ByVal v As Integer)
-End Sub
-
+' --- modLCD (#29 / M6). RefreshLCD lives in modLCD. ---
+' --- modIO (#30 / M7). IoRead and IoWrite live in modIO. ---
 ' --- K10. A8 StepMicro/RunProgram/MicroStep live in modControlUnit. ---
 ' --- A9 BuildCPUPanel/RefreshCPUPanel live in modPanelCPU. ---
-' --- modLCD (#29 / M6). RefreshLCD lives in modLCD. ---
 Public Sub BuildMiniMemory(ByVal ws As Worksheet)
 End Sub
 ' RefreshMemoryPanel / RefreshStats already exist in modStubs_Karen.
