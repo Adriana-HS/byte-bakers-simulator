@@ -220,20 +220,25 @@ End Sub
 Private Sub BuildKeyGrid(ByVal ws As Worksheet)
     Dim x As Single
     Dim y As Single
+    Dim rowW As Single
+    ' Letters stay on the 10-key grid. The specials get their own row,
+    ' the same width as 1..0, like the space bar of a real keyboard.
     PlaceRow ws, "1234567890", 0
     PlaceRow ws, "QWERTYUIOP", 1
     PlaceRow ws, "ASDFGHJKL", 2
-    PlaceKey ws, "kbd_k_SH", PAD_L + 9 * (KEY_W + KEY_GAP), KEY_TOP + 2 * (KEY_H + KEY_GAP), 74, "SHIFT"
     PlaceRow ws, "ZXCVBNM", 3
-    y = KEY_TOP + 3 * (KEY_H + KEY_GAP)
-    x = PAD_L + 7 * (KEY_W + KEY_GAP)
-    PlaceKey ws, "kbd_k_SP", x, y, 78, "SPACE"
-    x = x + 78 + KEY_GAP
-    PlaceKey ws, "kbd_k_BS", x, y, 52, "BKSP"
-    x = x + 52 + KEY_GAP
+    rowW = 10 * KEY_W + 9 * KEY_GAP
+    y = KEY_TOP + 4 * (KEY_H + KEY_GAP)
+    x = PAD_L
+    PlaceKey ws, "kbd_k_SH", x, y, 72, "SHIFT"
+    x = x + 72 + KEY_GAP
+    PlaceKey ws, "kbd_k_SP", x, y, 110, "SPACE"
+    x = x + 110 + KEY_GAP
+    PlaceKey ws, "kbd_k_BS", x, y, 58, "BKSP"
+    x = x + 58 + KEY_GAP
     PlaceKey ws, "kbd_k_EN", x, y, 60, "ENTER"
     x = x + 60 + KEY_GAP
-    PlaceKey ws, "kbd_k_PA", x, y, 60, "PASTE"
+    PlaceKey ws, "kbd_k_PA", x, y, rowW - (x - PAD_L), "PASTE"
 End Sub
 
 Private Sub PlaceRow(ByVal ws As Worksheet, ByVal chars As String, ByVal row As Integer)
