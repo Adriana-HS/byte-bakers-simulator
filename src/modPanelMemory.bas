@@ -9,9 +9,13 @@ Option Explicit
 ' stay where they are.
 ' Piece 2: RefreshMemoryPanel. Shows which page sits in each frame (from
 ' FrameOwner) with its first bytes, and repaints the cache boxes grey.
+' Piece 3: ShowTranslation. A strip (xlt_box, row 37) that shows
+' vaddr = VPN | offset -> PFN | offset = paddr, or PAGE FAULT.
 ' =====================================================================
 
 Private Const PANEL_TOP_ROW As Long = 28
+Private Const XLT_ROW As Long = 37
+Private Const XLT_NAME As String = "xlt_box"
 Private Const BOX_W As Single = 78
 Private Const STEP_X As Single = 84
 Private Const FRAME_H As Single = 50
@@ -48,6 +52,10 @@ Public Sub BuildMemoryPanel()
     For i = 0 To L2_LINES - 1
         AddCacheBox ws, "l2_line" & i, leftX + (2 + i) * STEP_X + 16, cacheY, "L2-" & i
     Next i
+
+    ' Translation strip under the caches
+    UI_AddBox ws, XLT_NAME, leftX, ws.Rows(XLT_ROW).Top, NUM_FRAMES * STEP_X - 6, 36, _
+        "Translation: waiting for a memory access"
 End Sub
 
 ' A cache box plus its label chip underneath (lbl_<name>)
@@ -103,6 +111,41 @@ Private Sub ResetCacheBox(ByVal nm As String, ByVal ws As Worksheet)
     If HasShape(ws, "lbl_" & nm) Then UI_SetText "lbl_" & nm, ""
 End Sub
 
+' Shows the address translation of the access in progress.
+' Present page : "vaddr 0x0A5 = VPN 5 | off 5  ->  PFN 2  ->  paddr 0x045 = PFN 2 | off 5"
+' Missing page : red strip with PAGE FAULT.
+Public Sub ShowTranslation(ByVal vpn As Integer, ByVal offset As Integer)
+    Dim ws As Worksheet, vaddr As Integer, paddr As Integer, txt As String
+    Set ws = ThisWorkbook.Worksheets(SH_MEM)
+
+    ' If the strip was never drawn, draw the panel first
+    If Not HasShape(ws, XLT_NAME) Then BuildMemoryPanel
+
+    vaddr = vpn * PAGE_SIZE + offset
+    txt = "vaddr 0x" & Right$("000" & Hex$(vaddr), 3) & " = " & _
+          "VPN " & vpn & " (" & ToBin(vpn, 4) & ") | off " & offset & " (" & ToBin(offset, OFFSET_BITS) & ")"
+
+    If PageTable(vpn).Present Then
+        paddr = PageTable(vpn).pfn * PAGE_SIZE + offset
+        txt = txt & vbLf & "-> PFN " & PageTable(vpn).pfn & " | off " & offset & _
+              "  =  paddr 0x" & Right$("00" & Hex$(paddr), 2)
+        UI_SetFill XLT_NAME, CLR_HIT
+    Else
+        txt = txt & vbLf & "-> PAGE FAULT (P" & vpn & " is not in RAM)"
+        UI_SetFill XLT_NAME, CLR_FAULT
+    End If
+    UI_SetText XLT_NAME, txt
+End Sub
+
+' Binary text of v with a fixed number of bits
+Private Function ToBin(ByVal v As Integer, ByVal bits As Integer) As String
+    Dim i As Integer, s As String
+    For i = bits - 1 To 0 Step -1
+        s = s & CStr((v \ (2 ^ i)) Mod 2)
+    Next i
+    ToBin = s
+End Function
+
 ' ---------- TESTS ----------
 
 Private Function HasShape(ByVal ws As Worksheet, ByVal nm As String) As Boolean
@@ -128,6 +171,7 @@ Public Sub Test_BuildMemoryPanel()
         If Not HasShape(ws, "l2_line" & i) Then fails = fails + 1: Debug.Print "  FAIL  1: missing l2_line" & i
         If Not HasShape(ws, "lbl_l2_line" & i) Then fails = fails + 1: Debug.Print "  FAIL  1: missing lbl_l2_line" & i
     Next i
+    If Not HasShape(ws, XLT_NAME) Then fails = fails + 1: Debug.Print "  FAIL  1: missing " & XLT_NAME
 
     ' 2) Real traffic: the cache animation must paint the boxes
     InvalidateAllCaches
@@ -196,5 +240,40 @@ Public Sub Test_RefreshMemoryPanel()
     RefreshMemoryPanel
 
     Debug.Print IIf(fails = 0, "Test_RefreshMemoryPanel: ALL OK", "Test_RefreshMemoryPanel: " & fails & " FAIL(S)")
+End Sub
+
+Public Sub Test_ShowTranslation()
+    Dim fails As Integer, ws As Worksheet, t As String
+    Dim oldPte As TPageEntry
+    Set ws = ThisWorkbook.Worksheets(SH_MEM)
+    BuildMemoryPanel
+
+    ' Save the page table entry this test changes
+    oldPte = PageTable(5)
+
+    ' 1) Page 5 present in frame 2: vaddr 0x0A5 (VPN 5, offset 5) -> paddr 0x45
+    PageTable(5).Present = True
+    PageTable(5).pfn = 2
+    ShowTranslation 5, 5
+    t = ws.Shapes(XLT_NAME).TextFrame2.TextRange.Text
+    If InStr(t, "0x0A5") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: must show vaddr 0x0A5, got: " & Replace(t, vbLf, "/")
+    If InStr(t, "VPN 5") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: must show VPN 5, got: " & Replace(t, vbLf, "/")
+    If InStr(t, "0101") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: must show VPN in binary 0101, got: " & Replace(t, vbLf, "/")
+    If InStr(t, "PFN 2") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: must show PFN 2, got: " & Replace(t, vbLf, "/")
+    If InStr(t, "paddr 0x45") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: must show paddr 0x45, got: " & Replace(t, vbLf, "/")
+    If ws.Shapes(XLT_NAME).fill.ForeColor.RGB <> CLR_HIT Then fails = fails + 1: Debug.Print "  FAIL  1: present page must be green"
+
+    ' 2) Page 5 not present: PAGE FAULT in red
+    PageTable(5).Present = False
+    ShowTranslation 5, 5
+    t = ws.Shapes(XLT_NAME).TextFrame2.TextRange.Text
+    If InStr(t, "PAGE FAULT") = 0 Then fails = fails + 1: Debug.Print "  FAIL  2: must say PAGE FAULT, got: " & Replace(t, vbLf, "/")
+    If ws.Shapes(XLT_NAME).fill.ForeColor.RGB <> CLR_FAULT Then fails = fails + 1: Debug.Print "  FAIL  2: fault must be CLR_FAULT"
+
+    ' Cleanup: restore the entry and redraw the panel
+    PageTable(5) = oldPte
+    BuildMemoryPanel
+
+    Debug.Print IIf(fails = 0, "Test_ShowTranslation: ALL OK", "Test_ShowTranslation: " & fails & " FAIL(S)")
 End Sub
 
