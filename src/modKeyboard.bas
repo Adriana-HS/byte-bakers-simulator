@@ -566,6 +566,10 @@ Public Function Test_Keyboard() As Long
     Dim fails As Long
     Dim v As Integer
     Dim i As Integer
+    Dim savedDelay As Long
+    Dim savedRun As Boolean
+    Dim clk0 As Long
+    Dim ws As Worksheet
 
     KbdInit
     fails = fails + KbdCheck("init empty count", RAM(KBD_COUNT) = 0)
@@ -617,8 +621,73 @@ Public Function Test_Keyboard() As Long
     KbdTypeString "ABCDEF"   ' only 2 fit
     fails = fails + KbdCheck("partial type count 8", RAM(KBD_COUNT) = 8)
 
+    savedDelay = AnimDelay
+    savedRun = RunFlag
+    AnimDelay = 0
+
+    ' Keys: space, backspace, enter, and SHIFT for lowercase
+    KbdInit
+    fails = fails + KbdCheck("space", KbdPress(32) And KbdPop() = 32)
+    fails = fails + KbdCheck("backspace 0x08", KbdPress(8) And KbdPop() = 8)
+    fails = fails + KbdCheck("enter 0x0D", KbdPress(13) And KbdPop() = 13)
+    KbdToggleShift
+    fails = fails + KbdCheck("shift sends a", KbdCodeForKey("A") = Asc("a"))
+    fails = fails + KbdCheck("shift press a", KbdPress(KbdCodeForKey("A")) And KbdPop() = Asc("a"))
+    KbdToggleShift
+    fails = fails + KbdCheck("shift off sends A", KbdCodeForKey("A") = Asc("A"))
+
+    ' Full queue ignores the key and keeps the message
+    KbdInit
+    For i = 1 To 8
+        KbdPress Asc("A")
+    Next i
+    fails = fails + KbdCheck("9th press ignored", KbdPress(Asc("B")) = False)
+    fails = fails + KbdCheck("full message", KbdStatusText = "Buffer full - key ignored")
+    fails = fails + KbdCheck("full still 8", RAM(KBD_COUNT) = 8)
+
+    ' IN on an empty queue does not invent a byte
+    KbdInit
+    KbdNoteWaiting
+    fails = fails + KbdCheck("waiting for key", KbdStatusText = "waiting for key")
+    fails = fails + KbdCheck("waiting stays empty", RAM(KBD_COUNT) = 0)
+
+    ' Typing during RUN only enqueues
+    KbdInit
+    clk0 = Clock
+    RunFlag = True
+    fails = fails + KbdCheck("press during RUN", KbdPress(Asc("Z")))
+    fails = fails + KbdCheck("RUN clock unchanged", Clock = clk0)
+    fails = fails + KbdCheck("RUN queued Z", KbdPop() = Asc("Z"))
+    RunFlag = savedRun
+
+    ' Pasted text, one press per character
+    KbdInit
+    KbdEnqueueAnimated "Hi"
+    fails = fails + KbdCheck("animated H", KbdPop() = Asc("H"))
+    fails = fails + KbdCheck("animated i", KbdPop() = Asc("i"))
+
+    ' Panel: arrows via ChrW, font sizes, and a clean queue on the way out
+    Set ws = ThisWorkbook.Worksheets(SH_SIM)
+    BuildIOPanel ws
+    fails = fails + KbdCheck("head arrow", InStr(TagText(ws, 0), ChrW(&H25B2)) > 0)
+    fails = fails + KbdCheck("key label 11 pt", ws.Shapes("kbd_k_A").TextFrame2.TextRange.Font.Size >= 11)
+    fails = fails + KbdCheck("tag 9 pt", ws.Shapes("kbd_tag0").TextFrame2.TextRange.Font.Size >= 9)
+    fails = fails + KbdCheck("status 9 pt", ws.Shapes("kbd_status").TextFrame2.TextRange.Font.Size >= 9)
+    fails = fails + KbdCheck("legend 9 pt", ws.Shapes("kbd_legend").TextFrame2.TextRange.Font.Size >= 9)
+    fails = fails + KbdCheck("ends empty", RAM(KBD_COUNT) = 0)
+    fails = fails + KbdCheck("no stale full text", InStr(KbdStatusText, "Buffer full") = 0)
+
+    AnimDelay = savedDelay
+    RunFlag = savedRun
+
     Debug.Print IIf(fails = 0, "Test_Keyboard: ALL OK", "Test_Keyboard: " & fails & " FAIL(S)")
     Test_Keyboard = fails
+End Function
+
+Private Function TagText(ByVal ws As Worksheet, ByVal i As Integer) As String
+    On Error Resume Next
+    TagText = ws.Shapes(PFX_KBD & "tag" & i).TextFrame2.TextRange.Text
+    On Error GoTo 0
 End Function
 
 Private Function KbdCheck(ByVal what As String, ByVal passed As Boolean) As Long
