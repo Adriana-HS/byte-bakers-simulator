@@ -13,12 +13,14 @@ Option Explicit
 ' vaddr = VPN | offset -> PFN | offset = paddr, or PAGE FAULT.
 ' Piece 4: UI_PageFaultFlash (page table row blinks red) and
 ' UI_AnimateSwapIn (a block travels from the swap grid to the frame).
+' Piece 5: UI_AnimateLineFill (a block travels from an L2 line to L1I/L1D).
 ' =====================================================================
 
 Private Const PANEL_TOP_ROW As Long = 28
 Private Const XLT_ROW As Long = 37
 Private Const XLT_NAME As String = "xlt_box"
 Private Const TOKEN_NAME As String = "tok_swap"
+Private Const FILL_TOKEN_NAME As String = "tok_fill"
 Private Const TOKEN_W As Single = 36
 Private Const TOKEN_H As Single = 18
 Private Const TOKEN_STEPS As Integer = 12
@@ -227,6 +229,36 @@ Public Sub UI_AnimateSwapIn(ByVal vpn As Integer, ByVal pfn As Integer)
     UI_SetFill PFX_FRM & pfn, CLR_ACTIVE
 End Sub
 
+' A block "line" travels from L2 line <idx> to the L1 box that receives it
+' (target = "l1i_box" or "l1d_box"). Called by FillFromL2 in modCache.
+' The boxes keep the colors that FlashCache gave them; only the token moves.
+' Skipped when animations are off (AnimDelay <= 0) or a shape is missing.
+Public Sub UI_AnimateLineFill(ByVal idx As Integer, ByVal target As String)
+    Dim ws As Worksheet, tok As Shape, src As Shape, dst As Shape, k As Integer
+    Dim x0 As Single, y0 As Single, x1 As Single, y1 As Single
+    If AnimDelay <= 0 Then Exit Sub
+    If idx < 0 Or idx >= L2_LINES Then Exit Sub
+    Set ws = ThisWorkbook.Worksheets(SH_MEM)
+    If Not HasShape(ws, "l2_line" & idx) Then Exit Sub
+    If Not HasShape(ws, target) Then Exit Sub
+    Set src = ws.Shapes("l2_line" & idx)
+    Set dst = ws.Shapes(target)
+
+    x0 = src.Left + (src.Width - TOKEN_W) / 2
+    y0 = src.Top + (src.Height - TOKEN_H) / 2
+    x1 = dst.Left + (dst.Width - TOKEN_W) / 2
+    y1 = dst.Top + (dst.Height - TOKEN_H) / 2
+
+    Set tok = UI_AddBox(ws, FILL_TOKEN_NAME, x0, y0, TOKEN_W, TOKEN_H, "line", CLR_ACTIVE)
+    For k = 1 To TOKEN_STEPS
+        tok.Left = x0 + (x1 - x0) * k / TOKEN_STEPS
+        tok.Top = y0 + (y1 - y0) * k / TOKEN_STEPS
+        DoEvents
+        UI_Wait 20
+    Next k
+    tok.Delete
+End Sub
+
 ' Visual demo for screenshots: a fault on page 3 loading into frame 2.
 ' Does not change the machine state.
 Public Sub Demo_PageFaultAnim()
@@ -237,6 +269,21 @@ Public Sub Demo_PageFaultAnim()
     ShowTranslation 3, 5
     UI_PageFaultFlash 3
     UI_AnimateSwapIn 3, 2
+    AnimDelay = oldDelay
+End Sub
+
+' Visual demo: a LOAD (L1D miss, line goes L2 -> L1D) and a fetch of the
+' same line (L1I miss, L2 hit, line goes L2 -> L1I). Reads only, RAM is not
+' changed. Afterwards run Test_CacheL1I and then BuildMemoryPanel to clean.
+Public Sub Demo_LineFillAnim()
+    Dim oldDelay As Long, v As Integer
+    oldDelay = AnimDelay
+    If AnimDelay <= 0 Then AnimDelay = 300   ' animations on only while the demo runs
+    BuildMemoryPanel
+    InvalidateAllCaches
+    ResetStats
+    v = CacheReadL1D(0)     ' L2 miss, line comes up to L1D
+    v = CacheReadL1I(1)     ' same line, L2 hit, line comes up to L1I
     AnimDelay = oldDelay
 End Sub
 
@@ -410,5 +457,55 @@ Public Sub Test_PageFaultAnim()
     BuildMemoryPanel
 
     Debug.Print IIf(fails = 0, "Test_PageFaultAnim: ALL OK", "Test_PageFaultAnim: " & fails & " FAIL(S)")
+End Sub
+
+Public Sub Test_LineFillAnim()
+    Dim fails As Integer, ws As Worksheet, v As Integer, i As Integer
+    Dim oldDelay As Long, oldClr As Long
+    Dim oldRam(0 To 15) As Integer
+    Set ws = ThisWorkbook.Worksheets(SH_MEM)
+    BuildMemoryPanel
+
+    ' The test needs the animations on (they are skipped when AnimDelay <= 0)
+    oldDelay = AnimDelay
+    If AnimDelay <= 0 Then AnimDelay = 1
+    For i = 0 To 15: oldRam(i) = RAM(i): Next i
+
+    ' 1) Direct call: the token is deleted and the boxes keep their color
+    oldClr = ws.Shapes("l1d_box").fill.ForeColor.RGB
+    UI_AnimateLineFill 2, "l1d_box"
+    If HasShape(ws, FILL_TOKEN_NAME) Then fails = fails + 1: Debug.Print "  FAIL  1: the token must be deleted after the animation"
+    If ws.Shapes("l1d_box").fill.ForeColor.RGB <> oldClr Then fails = fails + 1: Debug.Print "  FAIL  1: the animation must not change the color of l1d_box"
+
+    ' 2) Bad arguments are ignored without error
+    UI_AnimateLineFill 9, "l1d_box"
+    UI_AnimateLineFill 0, "no_such_box"
+    If HasShape(ws, FILL_TOKEN_NAME) Then fails = fails + 1: Debug.Print "  FAIL  2: bad arguments must not leave a token"
+
+    ' 3) Real traffic: a miss in L1D and another in L1I go through the animation
+    '    (modCache passes the box name) and leave no token and correct data
+    For i = 0 To 15: RAM(i) = 100 + i: Next i
+    InvalidateAllCaches
+    ResetStats
+    v = CacheReadL1D(0)
+    If v <> 100 Then fails = fails + 1: Debug.Print "  FAIL  3: CacheReadL1D(0) = " & v & " (expected 100)"
+    v = CacheReadL1I(9)
+    If v <> 109 Then fails = fails + 1: Debug.Print "  FAIL  3: CacheReadL1I(9) = " & v & " (expected 109)"
+    If HasShape(ws, FILL_TOKEN_NAME) Then fails = fails + 1: Debug.Print "  FAIL  3: no token may be left after real reads"
+    If Stats.L1DMiss <> 1 Or Stats.L1IMiss <> 1 Then fails = fails + 1: Debug.Print "  FAIL  3: expected 1 L1D miss and 1 L1I miss"
+
+    ' 4) With the animations off nothing is created
+    AnimDelay = 0
+    UI_AnimateLineFill 1, "l1i_box"
+    If HasShape(ws, FILL_TOKEN_NAME) Then fails = fails + 1: Debug.Print "  FAIL  4: with AnimDelay = 0 nothing may be drawn"
+
+    ' Cleanup
+    For i = 0 To 15: RAM(i) = oldRam(i): Next i
+    InvalidateAllCaches
+    ResetStats
+    AnimDelay = oldDelay
+    BuildMemoryPanel
+
+    Debug.Print IIf(fails = 0, "Test_LineFillAnim: ALL OK", "Test_LineFillAnim: " & fails & " FAIL(S)")
 End Sub
 
