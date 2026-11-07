@@ -335,7 +335,7 @@ Public Function UI_ShowArrow(ByVal arrowName As String, ByVal fromShape As Strin
     If a Is Nothing Or b Is Nothing Then Exit Function
     nm = ANIM_PFX & arrowName
 
-    RoutePoints a, b, busWire, xs, ys
+    RoutePoints a, b, busWire, xs, ys, True
     On Error Resume Next: a.Parent.Shapes(nm).Delete: On Error GoTo 0
     Set fb = a.Parent.Shapes.BuildFreeform(msoEditingAuto, xs(0), ys(0))
     For i = 1 To UBound(xs)
@@ -392,14 +392,17 @@ Private Sub ClearAnimOn(ByVal sheetName As String)
     On Error GoTo 0
 End Sub
 
-' Route between two shape centers through the bus line (right angles).
+' Route between two shapes through the bus line (right angles).
 ' Horizontal bus: down/up to the bus, along it, up/down to the target.
 ' Vertical bus: the same turned 90 degrees. No bus: straight segment.
+' Token route: centers, on the bus. Arrow route: shape edges, and a lane
+' a few points off the bus so the bus color does not hide the arrow.
 Private Sub RoutePoints(ByVal a As Shape, ByVal b As Shape, ByVal busWire As String, _
-        ByRef xs() As Single, ByRef ys() As Single)
+        ByRef xs() As Single, ByRef ys() As Single, Optional ByVal forArrow As Boolean = False)
+    Const LANE_GAP As Single = 7
     Dim bus As Shape
     Dim ax As Single, ay As Single, bx As Single, by As Single
-    Dim busX As Single, busY As Single
+    Dim lane As Single
 
     ax = a.Left + a.Width / 2: ay = a.Top + a.Height / 2
     bx = b.Left + b.Width / 2: by = b.Top + b.Height / 2
@@ -409,18 +412,28 @@ Private Sub RoutePoints(ByVal a As Shape, ByVal b As Shape, ByVal busWire As Str
         ReDim xs(0 To 1): ReDim ys(0 To 1)
         xs(0) = ax: ys(0) = ay: xs(1) = bx: ys(1) = by
     ElseIf bus.Width >= bus.Height Then
-        busY = bus.Top + bus.Height / 2
+        lane = bus.Top + bus.Height / 2
+        If forArrow Then
+            ay = IIf(lane > ay, a.Top + a.Height, a.Top)
+            by = IIf(lane > by, b.Top + b.Height, b.Top)
+            lane = lane + IIf(lane > ay, -LANE_GAP, LANE_GAP)
+        End If
         ReDim xs(0 To 3): ReDim ys(0 To 3)
         xs(0) = ax: ys(0) = ay
-        xs(1) = ax: ys(1) = busY
-        xs(2) = bx: ys(2) = busY
+        xs(1) = ax: ys(1) = lane
+        xs(2) = bx: ys(2) = lane
         xs(3) = bx: ys(3) = by
     Else
-        busX = bus.Left + bus.Width / 2
+        lane = bus.Left + bus.Width / 2
+        If forArrow Then
+            ax = IIf(lane > ax, a.Left + a.Width, a.Left)
+            bx = IIf(lane > bx, b.Left + b.Width, b.Left)
+            lane = lane + IIf(lane > ax, -LANE_GAP, LANE_GAP)
+        End If
         ReDim xs(0 To 3): ReDim ys(0 To 3)
         xs(0) = ax: ys(0) = ay
-        xs(1) = busX: ys(1) = ay
-        xs(2) = busX: ys(2) = by
+        xs(1) = lane: ys(1) = ay
+        xs(2) = lane: ys(2) = by
         xs(3) = bx: ys(3) = by
     End If
 End Sub
@@ -484,7 +497,16 @@ Public Sub Demo_UI()
     UI_Wait 60
     UI_CacheFlash "demo_cache", False
 
-    ' Missing shape must not crash — only warn.
+    ' Bus-routed transfer, then a two-driver collision on the same bus
+    UI_AddBox ws, "demo_reg", 40, 170, 70, 36, "MAR", CLR_HIGHZ
+    UI_AddWire ws, "demo_bus", 30, 240, 320, 240, 4
+    UI_AnimateTransfer "demo_boxA", "demo_reg", "demo_bus", "0x1A"
+    UI_Wait 400
+    UI_ShowCollision "demo_boxA", "demo_boxB", "demo_bus"
+    UI_Wait 400
+    UI_ClearTransfer
+
+    ' Missing shape must not crash - only warn.
     UI_Highlight "demo_missing_zzz", CLR_ACTIVE
 
     DemoCleanup ws
@@ -502,12 +524,13 @@ Private Sub DemoCleanup(ByVal ws As Worksheet)
     Dim names As Variant
     Dim i As Integer
     names = Array("demo_boxA", "demo_boxB", "demo_cache", "lbl_demo_cache", _
-                  "demo_wire", "demo_tok")
+                  "demo_wire", "demo_tok", "demo_reg", "demo_bus")
     On Error Resume Next
     For i = LBound(names) To UBound(names)
         ws.Shapes(CStr(names(i))).Delete
     Next i
     On Error GoTo 0
+    UI_ClearTransfer
 End Sub
 
 ' =====================================================================
@@ -534,15 +557,94 @@ Public Function Test_UI() As Long
     UI_PulseWire "no_such_shape_m2", 1
     UI_MoveToken "tok_x", "no_such_a", "no_such_b", "0", 2
     UI_CacheFlash "no_such_shape_m2", True
+    UI_AnimateTransfer "no_such_a", "no_such_b", "no_such_bus", "0", "no_such_c"
+    UI_ShowCollision "no_such_a", "no_such_b", "no_such_bus"
+    UI_MoveTokenViaBus "tok_x", "no_such_a", "no_such_b", "no_such_bus", "0"
+    UI_ShowArrow "arr_x", "no_such_a", "no_such_b"
+    UI_Badge "bdg_x", "no_such_a", "EN", CLR_ACTIVE
+    UI_ClearTransfer
     fails = fails + UiCheck("missing shapes do not raise", Err.Number = 0)
     On Error GoTo 0
 
     UI_Wait 0
     fails = fails + UiCheck("UI_Wait(0) returns", True)
 
+    ' Readable ink: dark text on light fills, light text on dark fills
+    fails = fails + UiCheck("ink on High-Z gray is navy", UI_InkFor(CLR_HIGHZ) = CLR_INK)
+    fails = fails + UiCheck("ink on amber is navy", UI_InkFor(CLR_LOAD) = CLR_INK)
+    fails = fails + UiCheck("ink on cream is navy", UI_InkFor(CLR_TEXT) = CLR_INK)
+    fails = fails + UiCheck("ink on navy is cream", UI_InkFor(CLR_BG) = CLR_TEXT)
+    fails = fails + UiCheck("ink on dark red is cream", UI_InkFor(CLR_FAULT) = CLR_TEXT)
+    fails = fails + UiCheck("contrast 1:1 and 21:1 bounds", _
+        Abs(UI_Contrast(CLR_BG, CLR_BG) - 1) < 0.001 And Abs(UI_Contrast(0, &HFFFFFF) - 21) < 0.001)
+    fails = fails + UiCheck("ink reaches 4.5:1 on gray, amber, navy", _
+        UI_Contrast(CLR_HIGHZ, UI_InkFor(CLR_HIGHZ)) >= 4.5 And _
+        UI_Contrast(CLR_LOAD, UI_InkFor(CLR_LOAD)) >= 4.5 And _
+        UI_Contrast(CLR_BG, UI_InkFor(CLR_BG)) >= 4.5)
+
+    fails = fails + TestTransferShapes()
+
     AnimDelay = saved
     Debug.Print IIf(fails = 0, "Test_UI: ALL OK", "Test_UI: " & fails & " FAIL(S)")
     Test_UI = fails
+End Function
+
+' Builds two boxes and a bus on Simulator, runs a transfer at speed 0 and
+' checks the arrow route, the badges and the cleanup. Removes everything.
+Private Function TestTransferShapes() As Long
+    Dim ws As Worksheet, arr As Shape
+    Dim fails As Long, i As Long, rightAngles As Boolean
+    Dim px As Single, py As Single, cx As Single, cy As Single
+
+    Set ws = ThisWorkbook.Worksheets(SH_SIM)
+    UI_AddBox ws, "tst_src", 40, 40, 60, 30, "PC", CLR_HIGHZ
+    UI_AddBox ws, "tst_dst", 220, 40, 60, 30, "MAR", CLR_HIGHZ
+    UI_AddWire ws, "tst_bus", 30, 120, 300, 120, 4
+
+    UI_AnimateTransfer "tst_src", "tst_dst", "tst_bus", "05"
+    fails = fails + UiCheck("transfer leaves arrow at speed 0", HasShape(ws, ANIM_PFX & "arrow"))
+    fails = fails + UiCheck("transfer leaves EN and LD badges", _
+        HasShape(ws, ANIM_PFX & "en") And HasShape(ws, ANIM_PFX & "ld"))
+    fails = fails + UiCheck("receiver latched in amber", ws.Shapes("tst_dst").Fill.ForeColor.RGB = CLR_LOAD)
+
+    Set arr = ws.Shapes(ANIM_PFX & "arrow")
+    rightAngles = (arr.Nodes.Count = 4)
+    If rightAngles Then
+        For i = 2 To arr.Nodes.Count
+            px = arr.Nodes(i - 1).Points(1, 1): py = arr.Nodes(i - 1).Points(1, 2)
+            cx = arr.Nodes(i).Points(1, 1): cy = arr.Nodes(i).Points(1, 2)
+            If Abs(px - cx) > 0.5 And Abs(py - cy) > 0.5 Then rightAngles = False
+        Next i
+    End If
+    fails = fails + UiCheck("arrow follows bus in right angles", rightAngles)
+
+    UI_ShowCollision "tst_src", "tst_dst", "tst_bus"
+    fails = fails + UiCheck("collision paints bus red", ws.Shapes("tst_bus").Line.ForeColor.RGB = CLR_MISS)
+
+    UI_ClearTransfer
+    fails = fails + UiCheck("UI_ClearTransfer removes anim_ shapes", AnimCount(ws) = 0)
+
+    On Error Resume Next
+    ws.Shapes("tst_src").Delete
+    ws.Shapes("tst_dst").Delete
+    ws.Shapes("tst_bus").Delete
+    On Error GoTo 0
+    TestTransferShapes = fails
+End Function
+
+Private Function HasShape(ByVal ws As Worksheet, ByVal nm As String) As Boolean
+    Dim s As Shape
+    On Error Resume Next
+    Set s = ws.Shapes(nm)
+    On Error GoTo 0
+    HasShape = Not s Is Nothing
+End Function
+
+Private Function AnimCount(ByVal ws As Worksheet) As Long
+    Dim s As Shape
+    For Each s In ws.Shapes
+        If Left$(s.Name, Len(ANIM_PFX)) = ANIM_PFX Then AnimCount = AnimCount + 1
+    Next s
 End Function
 
 Private Function UiCheck(ByVal what As String, ByVal passed As Boolean) As Long
