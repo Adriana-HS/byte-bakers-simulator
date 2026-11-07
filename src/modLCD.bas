@@ -152,3 +152,64 @@ Private Sub BlinkCell(ByVal i As Integer)
     RefreshLCD
 End Sub
 
+Public Function Test_LCD() As Long
+    Dim fails As Long
+    Dim i As Integer
+    Dim saved As Long
+    Dim ws As Worksheet
+
+    saved = AnimDelay
+    AnimDelay = 0
+    LcdInit
+    fails = fails + LcdCheck("init cursor 0", RAM(LCD_CURSOR) = 0)
+    fails = fails + LcdCheck("init cell empty", RAM(LCD_BASE) = 0)
+
+    LcdWrite Asc("A")
+    fails = fails + LcdCheck("wrote A", RAM(LCD_BASE) = Asc("A"))
+    fails = fails + LcdCheck("cursor advanced", RAM(LCD_CURSOR) = 1)
+
+    LcdWrite Asc("B")
+    LcdWrite 8
+    fails = fails + LcdCheck("backspace cursor", RAM(LCD_CURSOR) = 1)
+    fails = fails + LcdCheck("backspace cleared B", RAM(LCD_BASE + 1) = 0)
+    fails = fails + LcdCheck("backspace kept A", RAM(LCD_BASE) = Asc("A"))
+
+    RAM(LCD_CURSOR) = 0
+    LcdWrite 8
+    fails = fails + LcdCheck("backspace at 0 stays", RAM(LCD_CURSOR) = 0)
+    fails = fails + LcdCheck("backspace at 0 clears", RAM(LCD_BASE) = 0)
+
+    LcdInit
+    For i = 1 To 8
+        LcdWrite Asc("0") + i - 1
+    Next i
+    fails = fails + LcdCheck("cursor wrapped", RAM(LCD_CURSOR) = 0)
+    fails = fails + LcdCheck("last cell is 7", RAM(LCD_BASE + 7) = Asc("7"))
+    LcdWrite Asc("Z")
+    fails = fails + LcdCheck("wrap overwrites cell 0", RAM(LCD_BASE) = Asc("Z"))
+
+    ClearLCD
+    fails = fails + LcdCheck("clear cursor", RAM(LCD_CURSOR) = 0)
+    fails = fails + LcdCheck("clear buffer", RAM(LCD_BASE + 3) = 0)
+
+    Set ws = ThisWorkbook.Worksheets(SH_SIM)
+    LcdBuild ws
+    LcdWrite Asc("F")
+    fails = fails + LcdCheck("screen shows F", ws.Shapes("lcd_c0").TextFrame2.TextRange.Text = "F")
+    fails = fails + LcdCheck("glyph is LCD green", _
+        ws.Shapes("lcd_c0").TextFrame2.TextRange.Font.Fill.ForeColor.RGB = CLR_LCD)
+    fails = fails + LcdCheck("glyph is monospace", _
+        ws.Shapes("lcd_c0").TextFrame2.TextRange.Font.Name = "Consolas")
+    fails = fails + LcdCheck("cursor cell is outlined", ws.Shapes("lcd_c1").Line.Visible)
+    ClearLCD
+    fails = fails + LcdCheck("screen cleared", ws.Shapes("lcd_c0").TextFrame2.TextRange.Text = "")
+
+    AnimDelay = saved
+    Debug.Print IIf(fails = 0, "Test_LCD: ALL OK", "Test_LCD: " & fails & " FAIL(S)")
+    Test_LCD = fails
+End Function
+
+Private Function LcdCheck(ByVal what As String, ByVal passed As Boolean) As Long
+    Debug.Print IIf(passed, "  OK    ", "  FAIL  ") & what
+    LcdCheck = IIf(passed, 0, 1)
+End Function
