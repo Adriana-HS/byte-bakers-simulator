@@ -10,15 +10,6 @@ Attribute VB_Name = "modStubs_Misael"
 ' =====================================================================
 Option Explicit
 
-' ---------------------------------------------------------------------
-' TEMP compile bridges for M3 until A8 / A9 / K10 publish their stubs.
-' Must stay ABOVE all Subs (VBA forbids module vars after procedures).
-' When those modules land, DELETE these lines (same pattern as the old
-' UI_Highlight stub that lived here until M2).
-' ---------------------------------------------------------------------
-Public MicroStep As Integer   ' A8
-Public RunFlag As Boolean     ' A8
-
 ' --- modKeyboard / modLCD (#28/#29 / M5+M6) ---
 Public Sub BuildIOPanel(ByVal ws As Worksheet)
 End Sub
@@ -37,15 +28,7 @@ End Function
 Public Sub IoWrite(ByVal v As Integer)
 End Sub
 
-' --- A8 / A9 / K10 bridges (delete when real modules land) ---
-Public Sub StepMicro()
-    If MicroStep < 1 Then MicroStep = 1 Else MicroStep = MicroStep + 1
-End Sub
-
-Public Sub RunProgram()
-    RunFlag = True
-End Sub
-
+' --- A9 / K10 bridges (A8 StepMicro/RunProgram/MicroStep → modControlUnit) ---
 Public Sub BuildCPUPanel(ByVal ws As Worksheet)
 End Sub
 
