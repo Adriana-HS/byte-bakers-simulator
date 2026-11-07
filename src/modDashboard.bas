@@ -20,7 +20,7 @@ Private Const FRAME_W As Single = 640
 Private Const TOP_T As Single = 50
 Private Const TOP_H As Single = 344          ' CPU panel signal rows end at 388
 Private Const BOT_T As Single = 406
-Private Const BOT_H As Single = 320          ' keyboard rows end near 710 (#67)
+Private Const BOT_H As Single = 360          ' keyboard rows end near 740 (#67)
 Private Const HDR_H As Single = 16           ' header tab straddles the frame edge
 Private Const MIN_PT As Single = 9
 

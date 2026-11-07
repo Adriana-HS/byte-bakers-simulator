@@ -38,8 +38,8 @@ Private Const KEY_FILL As Long = CLR_BORDER                 ' RGB(58, 71, 89)
 Private Const KEY_EDGE As Long = &H6D5A4D                   ' RGB(77, 90, 109)
 Private Const KEY_W As Single = 34
 Private Const KEY_H As Single = 28
-Private Const KEY_GAP As Single = 4
-Private Const KEY_TOP As Single = 554          ' PAD_T + 132
+Private Const KEY_GAP As Single = 6
+Private Const KEY_TOP As Single = 576          ' clear of the legend
 
 Public KbdStatusText As String
 Private mShift As Boolean
@@ -183,8 +183,8 @@ Public Sub BuildIOPanel(ByVal ws As Worksheet)
 
     BuildQueueCells ws, PAD_L, PAD_T + 26
 
-    SoftBox ws, "kbd_status", PAD_L, PAD_T + 84, QUEUE_W, 20, KbdStatusText, NO_FILL, CLR_TEXT, 9, True
-    SoftBox ws, "kbd_legend", PAD_L, PAD_T + 110, QUEUE_W + 80, 18, _
+    SoftBox ws, "kbd_status", PAD_L, PAD_T + 98, QUEUE_W, 20, KbdStatusText, NO_FILL, CLR_TEXT, 9, True
+    SoftBox ws, "kbd_legend", PAD_L, PAD_T + 122, QUEUE_W + 80, 18, _
         ChrW(&H25B2) & "H pop (coral)   " & ChrW(&H25B2) & "T push (amber)", _
         NO_FILL, CLR_HIGHZ, 9, False
 
@@ -208,7 +208,7 @@ Private Sub BuildQueueCells(ByVal ws As Worksheet, ByVal left0 As Single, ByVal 
     For i = 0 To IO_BUF_SIZE - 1
         x = left0 + i * (CELL_W + CELL_GAP)
         SoftBox ws, PFX_KBD & "q" & i, x, top0, CELL_W, CELL_H, "", CLR_HIGHZ, KBD_INK, 14, True, "Consolas"
-        SoftBox ws, PFX_KBD & "tag" & i, x, top0 + CELL_H + 2, CELL_W, 16, CStr(i), NO_FILL, CLR_HIGHZ, 11, True
+        SoftBox ws, PFX_KBD & "tag" & i, x, top0 + CELL_H + 6, CELL_W, 18, CStr(i), NO_FILL, CLR_HIGHZ, 12, True
     Next i
 End Sub
 

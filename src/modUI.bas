@@ -345,7 +345,7 @@ Public Function UI_ShowArrow(ByVal arrowName As String, ByVal fromShape As Strin
     s.Name = nm
     s.Fill.Visible = msoFalse
     s.Line.ForeColor.RGB = clr
-    s.Line.Weight = 1.75
+    s.Line.Weight = 2.25
     s.Line.DashStyle = msoLineRoundDot
     s.Line.EndArrowheadStyle = msoArrowheadTriangle
     s.Line.EndArrowheadLength = msoArrowheadLong
@@ -399,7 +399,7 @@ End Sub
 ' a few points off the bus so the bus color does not hide the arrow.
 Private Sub RoutePoints(ByVal a As Shape, ByVal b As Shape, ByVal busWire As String, _
         ByRef xs() As Single, ByRef ys() As Single, Optional ByVal forArrow As Boolean = False)
-    Const LANE_GAP As Single = 7
+    Const LANE_GAP As Single = 12
     Dim bus As Shape
     Dim ax As Single, ay As Single, bx As Single, by As Single
     Dim lane As Single
