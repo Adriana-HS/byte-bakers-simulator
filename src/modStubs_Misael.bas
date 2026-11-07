@@ -19,10 +19,6 @@ Option Explicit
 Public MicroStep As Integer   ' A8
 Public RunFlag As Boolean     ' A8
 
-' --- modLCD (#29 / M6) — BuildIOPanel + RefreshKeyboard live in modKeyboard (#28) ---
-Public Sub RefreshLCD()
-End Sub
-
 ' --- modIO (#30 / M7) ---
 Public Function IoRead(ByVal destReg As Integer) As Integer
     IoRead = 0
