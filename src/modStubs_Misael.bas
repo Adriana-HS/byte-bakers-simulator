@@ -19,15 +19,7 @@ Option Explicit
 Public MicroStep As Integer   ' A8
 Public RunFlag As Boolean     ' A8
 
-' --- modIO (#30 / M7) ---
-Public Function IoRead(ByVal destReg As Integer) As Integer
-    IoRead = 0
-End Function
-
-Public Sub IoWrite(ByVal v As Integer)
-End Sub
-
-' --- A8 / K10 bridges (A9 BuildCPUPanel/RefreshCPUPanel → modPanelCPU) ---
+' --- A8 / K10 bridges (A9 BuildCPUPanel/RefreshCPUPanel -> modPanelCPU) ---
 Public Sub StepMicro()
     If MicroStep < 1 Then MicroStep = 1 Else MicroStep = MicroStep + 1
 End Sub
