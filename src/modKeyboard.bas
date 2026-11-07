@@ -195,13 +195,8 @@ Public Sub BuildIOPanel(ByVal ws As Worksheet)
     s.Line.Weight = 2
     AddKbdButton ws, "btn_KbdClear", BTN_X, PAD_T + 60, "CLEAR", "BtnKbdClear", CLR_HIGHZ
 
-    ' LCD column reserved for M6
-    SoftBox ws, "lcd_placeholder", LCD_X, PAD_T + 26, LCD_W, 62, "LCD 8x1  (M6)", NO_FILL, CLR_HIGHZ, 9, False
-    Set s = ws.Shapes("lcd_placeholder")
-    s.Line.Visible = msoTrue
-    s.Line.ForeColor.RGB = CLR_HIGHZ
-    s.Line.DashStyle = msoLineDash
-    s.Line.Weight = 1
+    ' LCD column: the real 8x1 latch (#29). The rectangle stays reserved.
+    LcdBuild ws
 
     BuildKeyGrid ws
     RefreshKeyboard
