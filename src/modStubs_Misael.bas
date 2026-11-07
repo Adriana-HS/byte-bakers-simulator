@@ -37,19 +37,13 @@ End Function
 Public Sub IoWrite(ByVal v As Integer)
 End Sub
 
-' --- A8 / A9 / K10 bridges (delete when real modules land) ---
+' --- A8 / K10 bridges (A9 BuildCPUPanel/RefreshCPUPanel → modPanelCPU) ---
 Public Sub StepMicro()
     If MicroStep < 1 Then MicroStep = 1 Else MicroStep = MicroStep + 1
 End Sub
 
 Public Sub RunProgram()
     RunFlag = True
-End Sub
-
-Public Sub BuildCPUPanel(ByVal ws As Worksheet)
-End Sub
-
-Public Sub RefreshCPUPanel()
 End Sub
 
 Public Sub BuildMiniMemory(ByVal ws As Worksheet)
