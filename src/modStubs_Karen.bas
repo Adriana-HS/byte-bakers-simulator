@@ -6,9 +6,6 @@ Option Explicit
 ' PR (otherwise VBA raises "Ambiguous name detected").
 ' =====================================================================
 
-' --- Statistics (K9) ---
-Public Sub RefreshStats(): End Sub
-
 ' --- modPanelMemory (K10) ---
 Public Sub ShowTranslation(ByVal vpn As Integer, ByVal offset As Integer): End Sub
 Public Sub UI_PageFaultFlash(ByVal vpn As Integer): End Sub
