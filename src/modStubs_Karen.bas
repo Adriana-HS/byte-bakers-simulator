@@ -6,9 +6,6 @@ Option Explicit
 ' (si no, VBA da "nombre ambiguo").
 ' =====================================================================
 
-' --- modMMU (K5) ---
-Public Sub HandlePageFault(ByVal vpn As Integer): End Sub
-
 ' --- modCache (K6, K7, K8) ---
 Public Sub InvalidateAllCaches(): End Sub
 Public Function CacheReadL1I(ByVal paddr As Integer) As Integer: CacheReadL1I = RAM(paddr): End Function
