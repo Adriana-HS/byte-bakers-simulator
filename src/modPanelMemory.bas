@@ -14,11 +14,17 @@ Option Explicit
 ' Piece 4: UI_PageFaultFlash (page table row blinks red) and
 ' UI_AnimateSwapIn (a block travels from the swap grid to the frame).
 ' Piece 5: UI_AnimateLineFill (a block travels from an L2 line to L1I/L1D).
+' Piece 6a: replacement policy selector (pol_fifo / pol_lru, row 40).
 ' =====================================================================
 
 Private Const PANEL_TOP_ROW As Long = 28
 Private Const XLT_ROW As Long = 37
 Private Const XLT_NAME As String = "xlt_box"
+Private Const POL_ROW As Long = 40
+Private Const POL_FIFO_NAME As String = "pol_fifo"
+Private Const POL_LRU_NAME As String = "pol_lru"
+Private Const POL_W As Single = 120
+Private Const POL_H As Single = 24
 Private Const TOKEN_NAME As String = "tok_swap"
 Private Const FILL_TOKEN_NAME As String = "tok_fill"
 Private Const TOKEN_W As Single = 36
@@ -67,6 +73,9 @@ Public Sub BuildMemoryPanel()
     ' Translation strip under the caches
     UI_AddBox ws, XLT_NAME, leftX, ws.Rows(XLT_ROW).Top, NUM_FRAMES * STEP_X - 6, 36, _
         "Translation: waiting for a memory access"
+
+    ' Replacement policy selector under the strip
+    BuildPolicySelector ws, leftX
 End Sub
 
 ' A cache box plus its label chip underneath (lbl_<name>)
@@ -78,10 +87,42 @@ Private Sub AddCacheBox(ByVal ws As Worksheet, ByVal nm As String, _
     chip.TextFrame2.TextRange.Font.size = 9
 End Sub
 
+' ---------- Piece 6a: replacement policy selector ----------
+
+' Two buttons. The one that matches ReplacePolicy is amber, the other grey.
+Private Sub BuildPolicySelector(ByVal ws As Worksheet, ByVal leftX As Single)
+    Dim t As Single, b As Shape
+    t = ws.Rows(POL_ROW).Top
+    Set b = UI_AddBox(ws, POL_FIFO_NAME, leftX, t, POL_W, POL_H, "Replace: FIFO")
+    b.OnAction = "SetPolicyFIFO"
+    Set b = UI_AddBox(ws, POL_LRU_NAME, leftX + POL_W + 8, t, POL_W, POL_H, "Replace: LRU")
+    b.OnAction = "SetPolicyLRU"
+    PaintPolicySelector ws
+End Sub
+
+Private Sub PaintPolicySelector(ByVal ws As Worksheet)
+    If Not HasShape(ws, POL_FIFO_NAME) Then Exit Sub
+    If Not HasShape(ws, POL_LRU_NAME) Then Exit Sub
+    UI_SetFill POL_FIFO_NAME, IIf(ReplacePolicy = POLICY_FIFO, CLR_LOAD, CLR_HIGHZ)
+    UI_SetFill POL_LRU_NAME, IIf(ReplacePolicy = POLICY_LRU, CLR_LOAD, CLR_HIGHZ)
+End Sub
+
+' Button handlers (assigned with OnAction)
+Public Sub SetPolicyFIFO()
+    ReplacePolicy = POLICY_FIFO
+    PaintPolicySelector ThisWorkbook.Worksheets(SH_MEM)
+End Sub
+
+Public Sub SetPolicyLRU()
+    ReplacePolicy = POLICY_LRU
+    PaintPolicySelector ThisWorkbook.Worksheets(SH_MEM)
+End Sub
+
 ' Repaints the panel from the current machine state:
 '  - frames 0..6: page that owns the frame (FrameOwner) + first bytes of RAM
 '  - frame 7 keeps its fixed I/O text
 '  - cache boxes go back to grey and their HIT/MISS chips are cleared
+'  - the policy selector matches ReplacePolicy
 Public Sub RefreshMemoryPanel()
     Dim ws As Worksheet, i As Integer, k As Integer
     Dim owner As Integer, base As Integer, preview As String
@@ -114,6 +155,8 @@ Public Sub RefreshMemoryPanel()
     For i = 0 To L2_LINES - 1
         ResetCacheBox "l2_line" & i, ws
     Next i
+
+    PaintPolicySelector ws
 End Sub
 
 ' One cache box back to grey, its label chip empty
@@ -313,6 +356,7 @@ Public Sub Test_BuildMemoryPanel()
         If Not HasShape(ws, "lbl_l2_line" & i) Then fails = fails + 1: Debug.Print "  FAIL  1: missing lbl_l2_line" & i
     Next i
     If Not HasShape(ws, XLT_NAME) Then fails = fails + 1: Debug.Print "  FAIL  1: missing " & XLT_NAME
+    If Not HasShape(ws, POL_FIFO_NAME) Or Not HasShape(ws, POL_LRU_NAME) Then fails = fails + 1: Debug.Print "  FAIL  1: missing policy selector"
 
     ' 2) Real traffic: the cache animation must paint the boxes
     InvalidateAllCaches
@@ -507,5 +551,44 @@ Public Sub Test_LineFillAnim()
     BuildMemoryPanel
 
     Debug.Print IIf(fails = 0, "Test_LineFillAnim: ALL OK", "Test_LineFillAnim: " & fails & " FAIL(S)")
+End Sub
+
+Public Sub Test_PolicySelector()
+    Dim fails As Integer, ws As Worksheet, oldPolicy As Integer
+    Set ws = ThisWorkbook.Worksheets(SH_MEM)
+    oldPolicy = ReplacePolicy
+    BuildMemoryPanel
+
+    ' 1) Both buttons exist and call the right macros
+    If Not HasShape(ws, POL_FIFO_NAME) Or Not HasShape(ws, POL_LRU_NAME) Then
+        fails = fails + 1: Debug.Print "  FAIL  1: missing pol_fifo or pol_lru"
+    Else
+        If InStr(ws.Shapes(POL_FIFO_NAME).OnAction, "SetPolicyFIFO") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: pol_fifo must call SetPolicyFIFO"
+        If InStr(ws.Shapes(POL_LRU_NAME).OnAction, "SetPolicyLRU") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: pol_lru must call SetPolicyLRU"
+    End If
+
+    ' 2) LRU: the policy changes and the amber button moves
+    SetPolicyLRU
+    If ReplacePolicy <> POLICY_LRU Then fails = fails + 1: Debug.Print "  FAIL  2: ReplacePolicy must be POLICY_LRU"
+    If ws.Shapes(POL_LRU_NAME).fill.ForeColor.RGB <> CLR_LOAD Then fails = fails + 1: Debug.Print "  FAIL  2: pol_lru must be amber"
+    If ws.Shapes(POL_FIFO_NAME).fill.ForeColor.RGB <> CLR_HIGHZ Then fails = fails + 1: Debug.Print "  FAIL  2: pol_fifo must be grey"
+
+    ' 3) FIFO: back again
+    SetPolicyFIFO
+    If ReplacePolicy <> POLICY_FIFO Then fails = fails + 1: Debug.Print "  FAIL  3: ReplacePolicy must be POLICY_FIFO"
+    If ws.Shapes(POL_FIFO_NAME).fill.ForeColor.RGB <> CLR_LOAD Then fails = fails + 1: Debug.Print "  FAIL  3: pol_fifo must be amber"
+    If ws.Shapes(POL_LRU_NAME).fill.ForeColor.RGB <> CLR_HIGHZ Then fails = fails + 1: Debug.Print "  FAIL  3: pol_lru must be grey"
+
+    ' 4) A change made from outside (not by the buttons) shows up after a refresh
+    ReplacePolicy = POLICY_LRU
+    RefreshMemoryPanel
+    If ws.Shapes(POL_LRU_NAME).fill.ForeColor.RGB <> CLR_LOAD Then fails = fails + 1: Debug.Print "  FAIL  4: refresh must repaint pol_lru as amber"
+    If ws.Shapes(POL_FIFO_NAME).fill.ForeColor.RGB <> CLR_HIGHZ Then fails = fails + 1: Debug.Print "  FAIL  4: refresh must repaint pol_fifo as grey"
+
+    ' Cleanup: the policy is the user's choice, so put it back as it was
+    ReplacePolicy = oldPolicy
+    BuildMemoryPanel
+
+    Debug.Print IIf(fails = 0, "Test_PolicySelector: ALL OK", "Test_PolicySelector: " & fails & " FAIL(S)")
 End Sub
 
