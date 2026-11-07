@@ -7,9 +7,8 @@ Attribute VB_Name = "modStubs_Adriana"
 ' they are implemented, so everybody's code compiles from day one.
 ' Rule: when a function is implemented, its stub is deleted in the SAME
 ' pull request; otherwise VBA raises "Ambiguous name detected".
+'
+' A6 landed ReleaseBuses / DriveDataBus in modBus — stubs removed here.
+' Remaining stubs for later Adriana modules go below when needed.
 ' =====================================================================
 Option Explicit
-
-' --- modBus (#6) ---
-Public Sub ReleaseBuses(): End Sub
-Public Sub DriveDataBus(ByVal source As String, ByVal value As Integer, ByVal isInternal As Boolean): End Sub
