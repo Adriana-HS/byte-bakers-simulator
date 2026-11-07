@@ -6,10 +6,6 @@ Option Explicit
 ' PR (otherwise VBA raises "Ambiguous name detected").
 ' =====================================================================
 
-' --- modCache (K8) ---
-Public Sub InvalidateAllCaches(): End Sub
-Public Sub InvalidateFrame(ByVal pfn As Integer): End Sub
-
 ' --- Statistics (K9) ---
 Public Sub RefreshStats(): End Sub
 
