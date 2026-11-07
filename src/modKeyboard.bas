@@ -32,7 +32,10 @@ Private Const BTN_H As Single = 28
 Private Const LCD_X As Single = 466            ' BTN_X + BTN_W + 12
 Private Const LCD_W As Single = 182            ' up to the frame padding (648)
 
-' On-screen keys sit under the queue, still inside frm_IO (#67).
+' One step lighter than the I/O frame (CLR_SURFACE) and one step lighter
+' again for the edge. Same navy ramp as the palette, only enough to read as a key.
+Private Const KEY_FILL As Long = CLR_BORDER                 ' RGB(58, 71, 89)
+Private Const KEY_EDGE As Long = &H6D5A4D                   ' RGB(77, 90, 109)
 Private Const KEY_W As Single = 34
 Private Const KEY_H As Single = 28
 Private Const KEY_GAP As Single = 4
@@ -246,11 +249,11 @@ End Sub
 Private Sub PlaceKey(ByVal ws As Worksheet, ByVal nm As String, ByVal l As Single, _
         ByVal t As Single, ByVal w As Single, ByVal txt As String)
     Dim s As Shape
-    SoftBox ws, nm, l, t, w, KEY_H, txt, CLR_SURFACE, CLR_TEXT, 11, True
+    SoftBox ws, nm, l, t, w, KEY_H, txt, KEY_FILL, CLR_TEXT, 11, True
     Set s = ws.Shapes(nm)
     s.OnAction = "KbdKeyClick"
     s.Line.Visible = msoTrue
-    s.Line.ForeColor.RGB = CLR_BORDER
+    s.Line.ForeColor.RGB = KEY_EDGE
     s.Line.Weight = 1
 End Sub
 
@@ -362,7 +365,7 @@ Private Sub PaintKeys()
     If ws Is Nothing Then Exit Sub
     For Each s In ws.Shapes
         If Left$(s.Name, 6) = "kbd_k_" And s.Name <> "kbd_k_SH" Then
-            s.Fill.ForeColor.RGB = CLR_SURFACE
+            s.Fill.ForeColor.RGB = KEY_FILL
             s.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = CLR_TEXT
         End If
     Next s
@@ -379,7 +382,15 @@ Private Sub PaintCell(ByVal i As Integer, ByVal fill As Long, ByVal label As Str
     Set s = ws.Shapes(PFX_KBD & "q" & i)
     If Not s Is Nothing Then
         s.Fill.ForeColor.RGB = fill
-        s.TextFrame2.TextRange.Text = label
+        With s.TextFrame2.TextRange
+            .Text = label
+            .Font.Name = "Consolas"
+            .Font.Size = 14
+            .Font.Bold = msoTrue
+            ' Set the ink after the text. Replacing the text drops the old color,
+            ' and a cream glyph on a cream cell is invisible.
+            .Font.Fill.ForeColor.RGB = KBD_INK
+        End With
         If edge = NO_FILL Then
             s.Line.Visible = msoFalse
         Else
@@ -445,7 +456,7 @@ Public Sub KbdKeyClick()
     ElseIf nm = "kbd_k_SP" Then
         KbdPress 32
     ElseIf nm = "kbd_k_BS" Then
-        KbdPress 8
+        KbdBackspace
     ElseIf nm = "kbd_k_EN" Then
         KbdPress 13
     ElseIf nm = "kbd_k_PA" Then
@@ -474,6 +485,9 @@ Public Sub KbdPasteClipboard()
     clip.GetFromClipboard
     s = CStr(clip.GetText)
     On Error GoTo 0
+    s = Replace(s, vbCrLf, "")
+    s = Replace(s, vbCr, "")
+    s = Replace(s, vbLf, "")
     If Len(s) = 0 Then
         KbdStatusText = "Nothing to paste"
         RefreshKeyboard
@@ -481,6 +495,28 @@ Public Sub KbdPasteClipboard()
     End If
     KbdEnqueueAnimated s
 End Sub
+
+' Remove the last queued byte. BKSP edits the buffer; it does not enqueue 0x08.
+Public Function KbdBackspace() As Boolean
+    Dim cnt As Integer
+    Dim tl As Integer
+    cnt = RAM(KBD_COUNT) And &HFF&
+    If cnt <= 0 Then
+        KbdStatusText = "Nothing to delete"
+        RefreshKeyboard
+        KbdBackspace = False
+        Exit Function
+    End If
+    tl = RAM(KBD_TAIL) And &HFF&
+    tl = (tl - 1 + IO_BUF_SIZE) Mod IO_BUF_SIZE
+    RAM(KBD_BASE + tl) = 0
+    RAM(KBD_TAIL) = tl
+    RAM(KBD_COUNT) = cnt - 1
+    KbdStatusText = "Deleted  |  " & CStr(cnt - 1) & "/8"
+    FlashKey "kbd_k_BS", CLR_ACTIVE
+    RefreshKeyboard
+    KbdBackspace = True
+End Function
 
 Public Sub BtnKbdPop()
     Dim v As Integer
@@ -534,7 +570,7 @@ Private Sub PaintShift()
         s.Fill.ForeColor.RGB = CLR_LOAD
         s.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = CLR_BG
     Else
-        s.Fill.ForeColor.RGB = CLR_SURFACE
+        s.Fill.ForeColor.RGB = KEY_FILL
         s.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = CLR_TEXT
     End If
     On Error GoTo 0
@@ -628,8 +664,11 @@ Public Function Test_Keyboard() As Long
     ' Keys: space, backspace, enter, and SHIFT for lowercase
     KbdInit
     fails = fails + KbdCheck("space", KbdPress(32) And KbdPop() = 32)
-    fails = fails + KbdCheck("backspace 0x08", KbdPress(8) And KbdPop() = 8)
     fails = fails + KbdCheck("enter 0x0D", KbdPress(13) And KbdPop() = 13)
+    KbdPress Asc("A")
+    KbdPress Asc("B")
+    fails = fails + KbdCheck("backspace deletes B", KbdBackspace() And KbdPop() = Asc("A"))
+    fails = fails + KbdCheck("backspace on empty", KbdBackspace() = False And RAM(KBD_COUNT) = 0)
     KbdToggleShift
     fails = fails + KbdCheck("shift sends a", KbdCodeForKey("A") = Asc("a"))
     fails = fails + KbdCheck("shift press a", KbdPress(KbdCodeForKey("A")) And KbdPop() = Asc("a"))
@@ -674,6 +713,20 @@ Public Function Test_Keyboard() As Long
     fails = fails + KbdCheck("tag 9 pt", ws.Shapes("kbd_tag0").TextFrame2.TextRange.Font.Size >= 9)
     fails = fails + KbdCheck("status 9 pt", ws.Shapes("kbd_status").TextFrame2.TextRange.Font.Size >= 9)
     fails = fails + KbdCheck("legend 9 pt", ws.Shapes("kbd_legend").TextFrame2.TextRange.Font.Size >= 9)
+    KbdPress Asc("9")
+    KbdPress Asc("A")
+    KbdPress Asc("I")
+    fails = fails + KbdCheck("cell0 shows 9", CellText(ws, 0) = "9")
+    fails = fails + KbdCheck("cell1 shows A", CellText(ws, 1) = "A")
+    fails = fails + KbdCheck("cell2 shows I", CellText(ws, 2) = "I")
+    fails = fails + KbdCheck("cell ink is navy", CellInk(ws, 1) = KBD_INK And CellInk(ws, 2) = KBD_INK)
+    fails = fails + KbdCheck("backspace clears I", KbdBackspace() And CellText(ws, 2) = "" And RAM(KBD_COUNT) = 2)
+    KbdInit
+    KbdPasteText "XY"
+    fails = fails + KbdCheck("paste count 2", RAM(KBD_COUNT) = 2)
+    fails = fails + KbdCheck("paste X", KbdPop() = Asc("X"))
+    fails = fails + KbdCheck("paste Y", KbdPop() = Asc("Y"))
+    KbdInit
     fails = fails + KbdCheck("ends empty", RAM(KBD_COUNT) = 0)
     fails = fails + KbdCheck("no stale full text", InStr(KbdStatusText, "Buffer full") = 0)
 
@@ -683,6 +736,34 @@ Public Function Test_Keyboard() As Long
     Debug.Print IIf(fails = 0, "Test_Keyboard: ALL OK", "Test_Keyboard: " & fails & " FAIL(S)")
     Test_Keyboard = fails
 End Function
+
+Private Function CellText(ByVal ws As Worksheet, ByVal i As Integer) As String
+    On Error Resume Next
+    CellText = ws.Shapes(PFX_KBD & "q" & i).TextFrame2.TextRange.Text
+    On Error GoTo 0
+End Function
+
+Private Function CellInk(ByVal ws As Worksheet, ByVal i As Integer) As Long
+    On Error Resume Next
+    CellInk = ws.Shapes(PFX_KBD & "q" & i).TextFrame2.TextRange.Font.Fill.ForeColor.RGB
+    On Error GoTo 0
+End Function
+
+' Puts text on the clipboard and runs PASTE. No-op if the clipboard is busy.
+Private Sub KbdPasteText(ByVal s As String)
+    Dim clip As Object
+    On Error Resume Next
+    Set clip = CreateObject("New:{1C3B4210-F441-11CE-B9EA-00AA006B1A69}")
+    clip.SetText s
+    clip.PutInClipboard
+    If Err.Number <> 0 Then
+        Err.Clear
+        KbdEnqueueAnimated s
+        Exit Sub
+    End If
+    On Error GoTo 0
+    KbdPasteClipboard
+End Sub
 
 Private Function TagText(ByVal ws As Worksheet, ByVal i As Integer) As String
     On Error Resume Next
