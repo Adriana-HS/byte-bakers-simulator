@@ -19,7 +19,7 @@ Private Const BUF_H As Single = 18
 Private Const SIG_W As Single = 20
 Private Const SIG_H As Single = 14
 
-' Soft chrome (hierarchy) — values still use coral/amber/gray dynamically
+' Soft chrome (hierarchy) - values still use coral/amber/gray dynamically
 Private Const CLR_LABEL As Long = &HC8B4A0&      ' RGB(160,180,200) muted label
 Private Const CLR_CHIP As Long = &H4A3828&       ' RGB(40,56,74) chip bg
 Private Const CLR_CLK_ON As Long = &H5AD8D8&     ' RGB(216,216,90) CLK pulse
@@ -40,7 +40,7 @@ Public Sub BuildCPUPanel(ByVal ws As Worksheet)
 
     ' Title + transfer (hierarchy: what is happening now)
     AddBox ws, "lbl_CPUTitle", PANEL_L, PANEL_T, 160, 20, "CPU / BUSES", CLR_CHIP
-    AddBox ws, "lbl_Transfer", PANEL_L + 170, PANEL_T, 280, 20, "— idle —", CLR_CHIP
+    AddBox ws, "lbl_Transfer", PANEL_L + 170, PANEL_T, 280, 20, "- idle -", CLR_CHIP
 
     ' --- GP registers + buffers (left column) ---
     y = PANEL_T + 28
@@ -89,16 +89,16 @@ Public Sub BuildCPUPanel(ByVal ws As Worksheet)
     AddBox ws, "lbl_Buses", PANEL_L, y, 200, 14, "BUSES  INT=9-bit  EXT=8-bit", CLR_CHIP
     y = y + 16
     UI_AddWire ws, PFX_WIRE & "INT_ADDR", PANEL_L, y + 6, PANEL_L + 520, y + 6, 3
-    AddBox ws, "val_INT_ADDR", PANEL_L + 524, y - 6, 90, 18, "INT —", CLR_CHIP
+    AddBox ws, "val_INT_ADDR", PANEL_L + 524, y - 6, 90, 18, "INT -", CLR_CHIP
     y = y + 16
     UI_AddWire ws, PFX_WIRE & "ADDR", PANEL_L, y + 6, PANEL_L + 520, y + 6, 3
-    AddBox ws, "val_EXT_ADDR", PANEL_L + 524, y - 6, 90, 18, "EXT —", CLR_CHIP
+    AddBox ws, "val_EXT_ADDR", PANEL_L + 524, y - 6, 90, 18, "EXT -", CLR_CHIP
     y = y + 16
     UI_AddWire ws, PFX_WIRE & "INT_DATA", PANEL_L, y + 6, PANEL_L + 520, y + 6, 3
-    AddBox ws, "val_INT_DATA", PANEL_L + 524, y - 6, 90, 18, "ID —", CLR_CHIP
+    AddBox ws, "val_INT_DATA", PANEL_L + 524, y - 6, 90, 18, "ID -", CLR_CHIP
     y = y + 16
     UI_AddWire ws, PFX_WIRE & "DATA", PANEL_L, y + 6, PANEL_L + 520, y + 6, 3
-    AddBox ws, "val_DATA", PANEL_L + 524, y - 6, 90, 18, "D —", CLR_CHIP
+    AddBox ws, "val_DATA", PANEL_L + 524, y - 6, 90, 18, "D -", CLR_CHIP
 
     ' --- Control word strip + CLK (bottom of CPU frame) ---
     y = PANEL_T + 300
@@ -191,9 +191,9 @@ Public Sub RefreshCPUPanel()
     ' Bus values
     UI_SetText "val_INT_ADDR", "INT " & BusHex(Bus.IntAddr, True)
     UI_SetText "val_EXT_ADDR", "EXT " & BusHex(Bus.ExtAddr, False)
-    UI_SetText "val_INT_DATA", "ID " & IIf(Bus.Internal, BusHex(Bus.Data, False), "—")
+    UI_SetText "val_INT_DATA", "ID " & IIf(Bus.Internal, BusHex(Bus.Data, False), "-")
     UI_SetText "val_DATA", "D " & IIf(Not Bus.Internal And Bus.Data <> HIGH_Z, BusHex(Bus.Data, False), _
-        IIf(Bus.Data = HIGH_Z, "—", BusHex(Bus.Data, False)))
+        IIf(Bus.Data = HIGH_Z, "-", BusHex(Bus.Data, False)))
 
     ' Active address driver
     If Len(Bus.AddrDriver) > 0 And Bus.IntAddr <> HIGH_Z Then
@@ -223,15 +223,15 @@ Public Sub RefreshCPUPanel()
         UI_Highlight PFX_REG & recv, CLR_LOAD
     End If
 
-    ' Transfer label e.g. MDR → AX
+    ' Transfer label e.g. MDR -> AX
     If Len(Bus.DataDriver) > 0 And Len(recv) > 0 Then
-        UI_SetText "lbl_Transfer", Bus.DataDriver & " → " & recv
+        UI_SetText "lbl_Transfer", Bus.DataDriver & " -> " & recv
     ElseIf Len(Bus.AddrDriver) > 0 And (cw And SIG_LD_MAR) <> 0 Then
-        UI_SetText "lbl_Transfer", Bus.AddrDriver & " → MAR"
+        UI_SetText "lbl_Transfer", Bus.AddrDriver & " -> MAR"
     ElseIf Len(Bus.DataDriver) > 0 Then
-        UI_SetText "lbl_Transfer", Bus.DataDriver & " → bus"
+        UI_SetText "lbl_Transfer", Bus.DataDriver & " -> bus"
     Else
-        UI_SetText "lbl_Transfer", "— idle —"
+        UI_SetText "lbl_Transfer", "- idle -"
     End If
 
     ' Control word lights
@@ -251,7 +251,7 @@ Public Sub RefreshCPUPanel()
         End If
     Next i
     UI_SetFill PFX_SIG & "CLK", IIf(Bus.Clk, CLR_CLK_ON, CLR_HIGHZ)
-    UI_SetText PFX_SIG & "CLK", IIf(Bus.Clk, "CLK●", "CLK")
+    UI_SetText PFX_SIG & "CLK", IIf(Bus.Clk, "CLK" & ChrW(&H25CF), "CLK")
 
     ' Highlight current IR opcode row on ISA sheet (cells, not shapes)
     Decode CPU.IR, op, reg, operand
@@ -356,7 +356,7 @@ Public Function Test_PanelCPU() As Long
         fails = fails + PanCheck("shape " & names(i), ShapeExists(ws, CStr(names(i))))
     Next i
 
-    ' Simulate MDR → AX transfer
+    ' Simulate MDR -> AX transfer
     ResetCPU
     ReleaseBuses
     SetMDR &H2A
