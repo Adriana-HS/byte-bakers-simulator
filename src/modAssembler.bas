@@ -1,4 +1,4 @@
-﻿Attribute VB_Name = "modAssembler"
+Attribute VB_Name = "modAssembler"
 ' =====================================================================
 ' modAssembler - Two-pass assembler with syntax validation (G5)
 ' Owner: Misael  |  Task: #27 (M4)
@@ -288,13 +288,151 @@ Private Sub AddErr(ByVal lineNo As Long, ByVal msg As String)
     AsmErrors.Add "Line " & lineNo & ": " & msg
 End Sub
 
-' Soft UX placeholder (pastel banner in follow-up commit).
+' Soft UX: pastel status strip + first error on Programs sheet (never crashes).
 Private Sub PaintAsmStatus(ByVal ok As Boolean)
     Dim ws As Worksheet
+    Dim banner As Range
+    Dim detail As Range
+    Dim tip As String
     On Error Resume Next
     Set ws = ThisWorkbook.Worksheets(SH_PROG)
     If ws Is Nothing Then Exit Sub
-    ws.Range("B2").Value = AsmStatusText
+
+    ' Soft lavender chrome so the Programs sheet feels designed, not raw grid
+    ws.Range("A1").Value = "ASSEMBLER"
+    ws.Range("A1").Font.Name = "Segoe UI"
+    ws.Range("A1").Font.Size = 12
+    ws.Range("A1").Font.Bold = True
+    ws.Range("A1").Font.Color = RGB(90, 80, 120)
+    ws.Range("A1").Interior.Color = RGB(232, 228, 245)   ' lilac
+
+    Set banner = ws.Range("B2:F2")
+    banner.Merge
+    banner.Value = AsmStatusText
+    banner.Font.Name = "Consolas"
+    banner.Font.Size = 12
+    banner.Font.Bold = True
+    banner.HorizontalAlignment = xlLeft
+    banner.VerticalAlignment = xlCenter
+    ws.Rows(2).RowHeight = 22
+
+    Set detail = ws.Range("B3:F3")
+    detail.Merge
+    detail.Font.Name = "Segoe UI"
+    detail.Font.Size = 10
+    detail.Font.Bold = False
+    detail.HorizontalAlignment = xlLeft
+
+    If ok Then
+        banner.Interior.Color = RGB(210, 235, 222)   ' mint
+        banner.Font.Color = RGB(40, 90, 70)
+        tip = "Ready to load into memory"
+        detail.Value = tip
+        detail.Interior.Color = RGB(236, 245, 240)
+        detail.Font.Color = RGB(70, 110, 90)
+    Else
+        banner.Interior.Color = RGB(255, 228, 225)   ' soft rose
+        banner.Font.Color = RGB(120, 50, 50)
+        If Not AsmErrors Is Nothing Then
+            If AsmErrors.Count > 0 Then
+                tip = CStr(AsmErrors(1))
+            Else
+                tip = "Fix the source and assemble again"
+            End If
+        Else
+            tip = "Fix the source and assemble again"
+        End If
+        detail.Value = tip
+        detail.Interior.Color = RGB(255, 242, 238)
+        detail.Font.Color = RGB(130, 70, 70)
+    End If
     On Error GoTo 0
 End Sub
 
+' =====================================================================
+' Test_Assembler - Immediate self-check for M4 / #27.
+' =====================================================================
+Public Function Test_Assembler() As Long
+    Dim fails As Long
+    Dim bytes As Variant
+    Dim lines As Variant
+
+    ' --- Program 1 (multiply) ---
+    lines = Array( _
+        "; Program 1", _
+        "MOV AX, 0", _
+        "MOV BX, 7", _
+        "MOV CX, 5", _
+        "mult: ADD AX, BX", _
+        "DEC CX", _
+        "JNZ mult", _
+        "MOV DX, AX", _
+        "STORE [0x080], DX", _
+        "HLT")
+    bytes = Assemble(lines)
+    fails = fails + AsmCheck("Program 1 assembles", AsmErrors.Count = 0)
+    fails = fails + AsmCheck("Program 1 byte count 18", Not IsEmpty(bytes) And UBound(bytes) - LBound(bytes) + 1 = 18)
+
+    ' --- Program 2 (echo) ---
+    lines = Array( _
+        "MOV CX, 8", _
+        "read: IN AX, [KBD]", _
+        "CMP AX, 0", _
+        "JZ read", _
+        "OUT [LCD], AX", _
+        "DEC CX", _
+        "JNZ read", _
+        "HLT")
+    bytes = Assemble(lines)
+    fails = fails + AsmCheck("Program 2 assembles", AsmErrors.Count = 0)
+
+    ' --- Program 3 (scattered) ---
+    lines = Array( _
+        "MOV CX, 3", _
+        "pass: LOAD AX, [0x020]", _
+        "LOAD BX, [0x060]", _
+        "ADD AX, BX", _
+        "STORE [0x0A0], AX", _
+        "LOAD DX, [0x0E0]", _
+        "STORE [0x120], DX", _
+        "LOAD BX, [0x160]", _
+        "STORE [0x1A0], BX", _
+        "LOAD AX, [0x1C0]", _
+        "DEC CX", _
+        "JNZ pass", _
+        "HLT")
+    bytes = Assemble(lines)
+    fails = fails + AsmCheck("Program 3 assembles", AsmErrors.Count = 0)
+
+    ' --- literals ---
+    bytes = Assemble(Array("MOV AX, 'F'", "HLT"))
+    fails = fails + AsmCheck("char literal 'F'", AsmErrors.Count = 0 And bytes(1) = Asc("F"))
+
+    ' --- error: unknown opcode ---
+    bytes = Assemble(Array("FOO AX, 1"))
+    fails = fails + AsmCheck("unknown opcode errors", AsmErrors.Count > 0)
+
+    ' --- error: bad register ---
+    bytes = Assemble(Array("MOV ZZ, 1"))
+    fails = fails + AsmCheck("invalid register errors", AsmErrors.Count > 0)
+
+    ' --- error: undefined label ---
+    bytes = Assemble(Array("JMP nowhere"))
+    fails = fails + AsmCheck("undefined label errors", AsmErrors.Count > 0)
+
+    ' --- error: wrong operands ---
+    bytes = Assemble(Array("ADD AX"))
+    fails = fails + AsmCheck("wrong operands errors", AsmErrors.Count > 0)
+
+    ' --- error: imm out of range ---
+    bytes = Assemble(Array("MOV AX, 300"))
+    fails = fails + AsmCheck("imm out of range errors", AsmErrors.Count > 0)
+
+    Debug.Print IIf(fails = 0, "Test_Assembler: ALL OK", "Test_Assembler: " & fails & " FAIL(S)")
+    Test_Assembler = fails
+End Function
+
+Private Function AsmCheck(ByVal what As String, ByVal passed As Boolean) As Long
+    Debug.Print IIf(passed, "  OK    ", "  FAIL  ") & what
+    AsmCheck = IIf(passed, 0, 1)
+End Function
