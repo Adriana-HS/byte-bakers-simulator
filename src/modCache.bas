@@ -3,28 +3,29 @@ Option Explicit
 ' =====================================================================
 ' modCache - Cache hierarchy (K6: L1I; K7: L1D; K8: L2)
 '   L1I: 8 B (1 line), direct mapped, instruction fetch only.
+'   L1D: 8 B (1 line), direct mapped, LOAD/STORE only.
 '   Works with PHYSICAL addresses (after the MMU).
 '   tag = paddr \ LINE_SIZE
-' The I/O page (15) never gets here: MemRead bypasses the cache for it.
+'
+' WRITE POLICY (L1D): write-through + no-write-allocate
+'   - STORE hit : the line is updated AND RAM is written.
+'   - STORE miss: the line is NOT brought into the cache (no-write-allocate),
+'                 RAM is written anyway.
+'   - RAM is ALWAYS up to date. Writes also count hit/miss in L1D.
+'
+' The I/O page (15) never gets here: MemRead/MemWrite bypass the cache for it.
 ' Until L2 exists (K8), a new line is read straight from RAM.
 ' =====================================================================
 
-' Area of the Memory sheet that shows the cache state
-' (below the page table and the swap grid; K10 will move it).
 Private Const CACHE_HDR_ROW As Long = 19
 Private Const L1I_ROW As Long = 20
+Private Const L1D_ROW As Long = 21
 
-' Shape of the K10 panel that is animated on every L1I access.
-' If it does not exist yet, the animation is simply skipped.
 Private Const SHP_L1I As String = "l1i_box"
+Private Const SHP_L1D As String = "l1d_box"
 
 ' ---------- K6: L1I ----------
 
-' Reads one instruction byte through L1I.
-'  - HIT : same tag and valid line -> the cache answers, it does NOT go to L2/RAM.
-'  - MISS: fetches the whole 8-byte line (4 instructions) and answers.
-' An instruction takes 2 bytes, so 4 consecutive instructions are
-' 8 reads: 1 miss + 7 hits.
 Public Function CacheReadL1I(ByVal paddr As Integer) As Integer
     Dim tag As Integer
     CheckPaddr paddr
@@ -32,16 +33,69 @@ Public Function CacheReadL1I(ByVal paddr As Integer) As Integer
     If L1I.Valid And L1I.tag = tag Then
         Stats.L1IHit = Stats.L1IHit + 1
         FlashCache SHP_L1I, True
-        ShowL1IHit
+        ShowResultAt L1I_ROW, L1I, "HIT"
     Else
         Stats.L1IMiss = Stats.L1IMiss + 1
         FlashCache SHP_L1I, False
         FillFromL2 L1I, tag
-        ShowL1ILine "MISS"
+        ShowLineAt L1I_ROW, L1I, "MISS"
     End If
     L1I.LastUse = Clock
     CacheReadL1I = L1I.Data(paddr Mod LINE_SIZE)
 End Function
+
+' ---------- K7: L1D ----------
+
+Public Function CacheReadL1D(ByVal paddr As Integer) As Integer
+    Dim tag As Integer
+    CheckPaddr paddr
+    tag = paddr \ LINE_SIZE
+    If L1D.Valid And L1D.tag = tag Then
+        Stats.L1DHit = Stats.L1DHit + 1
+        FlashCache SHP_L1D, True
+        ShowResultAt L1D_ROW, L1D, "HIT"
+    Else
+        Stats.L1DMiss = Stats.L1DMiss + 1
+        FlashCache SHP_L1D, False
+        FillFromL2 L1D, tag
+        ShowLineAt L1D_ROW, L1D, "MISS"
+    End If
+    L1D.LastUse = Clock
+    CacheReadL1D = L1D.Data(paddr Mod LINE_SIZE)
+End Function
+
+' STORE: write-through + no-write-allocate.
+'  - HIT : updates the byte in the L1D line.
+'  - MISS: the line is NOT loaded.
+'  - Both cases count hit/miss in L1D, and RAM is ALWAYS written.
+Public Sub CacheWriteL1D(ByVal paddr As Integer, ByVal value As Integer)
+    Dim tag As Integer
+    CheckPaddr paddr
+    value = value And BYTE_MAX
+    tag = paddr \ LINE_SIZE
+    If L1D.Valid And L1D.tag = tag Then
+        Stats.L1DHit = Stats.L1DHit + 1
+        L1D.Data(paddr Mod LINE_SIZE) = value
+        L1D.LastUse = Clock
+        FlashCache SHP_L1D, True
+        ShowLineAt L1D_ROW, L1D, "HIT"
+    Else
+        Stats.L1DMiss = Stats.L1DMiss + 1
+        FlashCache SHP_L1D, False
+        ShowResultAt L1D_ROW, L1D, "MISS"
+    End If
+    WriteThroughToL2 paddr, value
+    RAM(paddr) = value
+End Sub
+
+' K7 PLACEHOLDER: there is no L2 yet.
+' K8 completes it: update the L2 line on a hit, count Stats.L2Hit/L2Miss
+' for the STORE and animate l2_lineN.
+Private Sub WriteThroughToL2(ByVal paddr As Integer, ByVal value As Integer)
+    ' Intentionally empty until K8.
+End Sub
+
+' ---------- Line fill ----------
 
 ' K6 PLACEHOLDER: there is no L2 yet, so the line is read straight from RAM.
 ' K8 replaces the body: look in L2 first and go down to RAM only on an L2 miss.
@@ -108,20 +162,24 @@ Private Sub EnsureCacheTable(ByVal ws As Worksheet)
         ws.Cells(CACHE_HDR_ROW, 4 + i).value = "B" & i
     Next i
     ws.Range(ws.Cells(CACHE_HDR_ROW, 1), ws.Cells(CACHE_HDR_ROW, 11)).Font.Bold = True
-    ws.Cells(L1I_ROW, 1).value = "L1I"
 End Sub
 
-' Redraws the whole L1I row: result, tag and the 8 bytes in hexadecimal
-Private Sub ShowL1ILine(ByVal result As String)
+Private Function RowLabel(ByVal rowNum As Long) As String
+    If rowNum = L1D_ROW Then RowLabel = "L1D" Else RowLabel = "L1I"
+End Function
+
+' Redraws a whole cache row: result, tag and the 8 bytes in hexadecimal
+Private Sub ShowLineAt(ByVal rowNum As Long, ByRef line As TCacheLine, ByVal result As String)
     Dim ws As Worksheet, i As Integer
     Dim cellsRow(0 To 0, 0 To 9) As String
     Set ws = GetCacheSheet()
     EnsureCacheTable ws
+    ws.Cells(rowNum, 1).value = RowLabel(rowNum)
     cellsRow(0, 0) = result
-    If L1I.Valid Then
-        cellsRow(0, 1) = CStr(L1I.tag)
+    If line.Valid Then
+        cellsRow(0, 1) = CStr(line.tag)
         For i = 0 To LINE_SIZE - 1
-            cellsRow(0, 2 + i) = Hex2(L1I.Data(i))
+            cellsRow(0, 2 + i) = Hex2(line.Data(i))
         Next i
     Else
         cellsRow(0, 1) = "-"
@@ -129,24 +187,37 @@ Private Sub ShowL1ILine(ByVal result As String)
             cellsRow(0, 2 + i) = "--"
         Next i
     End If
-    ws.Range(ws.Cells(L1I_ROW, 2), ws.Cells(L1I_ROW, 11)).value = cellsRow
+    ws.Range(ws.Cells(rowNum, 2), ws.Cells(rowNum, 11)).value = cellsRow
     Select Case result
-        Case "HIT": ws.Cells(L1I_ROW, 2).Interior.Color = CLR_HIT
-        Case "MISS": ws.Cells(L1I_ROW, 2).Interior.Color = CLR_MISS
-        Case Else: ws.Cells(L1I_ROW, 2).Interior.Pattern = xlNone
+        Case "HIT": ws.Cells(rowNum, 2).Interior.Color = CLR_HIT
+        Case "MISS": ws.Cells(rowNum, 2).Interior.Color = CLR_MISS
+        Case Else: ws.Cells(rowNum, 2).Interior.Pattern = xlNone
     End Select
 End Sub
 
-' On a hit the line does not change: only the result cell is updated
-Private Sub ShowL1IHit()
+' The line does not change (read hit / write miss): only the result cell is updated
+Private Sub ShowResultAt(ByVal rowNum As Long, ByRef line As TCacheLine, ByVal result As String)
     Dim ws As Worksheet
     Set ws = GetCacheSheet()
     If CStr(ws.Cells(CACHE_HDR_ROW, 1).value) <> "Cache" Then
-        ShowL1ILine "HIT"
+        ShowLineAt rowNum, line, result
         Exit Sub
     End If
-    ws.Cells(L1I_ROW, 2).value = "HIT"
-    ws.Cells(L1I_ROW, 2).Interior.Color = CLR_HIT
+    ws.Cells(rowNum, 1).value = RowLabel(rowNum)
+    ws.Cells(rowNum, 2).value = result
+    If result = "HIT" Then
+        ws.Cells(rowNum, 2).Interior.Color = CLR_HIT
+    Else
+        ws.Cells(rowNum, 2).Interior.Color = CLR_MISS
+    End If
+End Sub
+
+Private Sub ShowL1ILine(ByVal result As String)
+    ShowLineAt L1I_ROW, L1I, result
+End Sub
+
+Private Sub ShowL1DLine(ByVal result As String)
+    ShowLineAt L1D_ROW, L1D, result
 End Sub
 
 ' ---------- TESTS ----------
@@ -156,7 +227,6 @@ Public Sub Test_CacheL1I()
     Dim ws As Worksheet, emptyStats As TStats, emptyLine As TCacheLine
     Set ws = GetCacheSheet()
 
-    ' Starting point: RAM(0..31) = 100+i, L1I invalid, counters at 0
     For i = 0 To 31: RAM(i) = 100 + i: Next i
     L1I = emptyLine
     Stats = emptyStats
@@ -171,7 +241,7 @@ Public Sub Test_CacheL1I()
         fails = fails + 1: Debug.Print "  FAIL  1: the sheet should show MISS, tag 0, bytes 64..6B"
     End If
 
-    ' 2) The other 7 bytes of the line (4 instructions = 8 reads): 7 HITS
+    ' 2) The other 7 bytes of the line: 7 HITS
     For i = 1 To 7
         v = CacheReadL1I(i)
         If v <> 100 + i Then fails = fails + 1: Debug.Print "  FAIL  2: CacheReadL1I(" & i & ") = " & v & " (expected " & 100 + i & ")"
@@ -179,7 +249,7 @@ Public Sub Test_CacheL1I()
     If Stats.L1IHit <> 7 Or Stats.L1IMiss <> 1 Then fails = fails + 1: Debug.Print "  FAIL  2: 8 consecutive reads must give 1 miss + 7 hits (" & Stats.L1IMiss & " miss, " & Stats.L1IHit & " hits)"
     If CStr(ws.Cells(L1I_ROW, 2).value) <> "HIT" Then fails = fails + 1: Debug.Print "  FAIL  2: the sheet should show HIT"
 
-    ' 3) Line change: MISS, L1I has a single line (tag 1)
+    ' 3) Line change: MISS (tag 1)
     v = CacheReadL1I(8)
     If v <> 108 Then fails = fails + 1: Debug.Print "  FAIL  3: CacheReadL1I(8) = " & v & " (expected 108)"
     If Stats.L1IMiss <> 2 Then fails = fails + 1: Debug.Print "  FAIL  3: expected 2 misses"
@@ -194,13 +264,13 @@ Public Sub Test_CacheL1I()
         fails = fails + 1: Debug.Print "  FAIL  3: the sheet should show MISS, tag 1, bytes 6C..73"
     End If
 
-    ' 4) A HIT does not go down to RAM: RAM changes, the cache still returns the old data
+    ' 4) A HIT does not go down to RAM
     RAM(10) = 250
     v = CacheReadL1I(10)
     If v <> 110 Then fails = fails + 1: Debug.Print "  FAIL  4: a HIT must be answered by the cache (110), got " & v
     If Stats.L1IHit <> 8 Or Stats.L1IMiss <> 2 Then fails = fails + 1: Debug.Print "  FAIL  4: expected 8 hits and 2 misses"
 
-    ' 5) A MISS does read again: the new line already has the updated data
+    ' 5) A MISS reads again
     v = CacheReadL1I(0)
     If v <> 100 Or Stats.L1IMiss <> 3 Then fails = fails + 1: Debug.Print "  FAIL  5: going back to line 0 must be a MISS and return 100"
     v = CacheReadL1I(10)
@@ -213,7 +283,7 @@ Public Sub Test_CacheL1I()
     v = CacheReadL1I(10)
     If v <> 250 Or Stats.L1IMiss <> 5 Or Stats.L1IHit <> 9 Then fails = fails + 1: Debug.Print "  FAIL  6: an invalid line must give a MISS (miss=" & Stats.L1IMiss & ", hit=" & Stats.L1IHit & ")"
 
-    ' 7) Physical address out of range: clear error
+    ' 7) Physical address out of range
     On Error Resume Next
     v = CacheReadL1I(256)
     If Err.Number <> vbObjectError + 550 Then fails = fails + 1: Debug.Print "  FAIL  7: CacheReadL1I(256) did not raise error 550"
@@ -223,7 +293,7 @@ Public Sub Test_CacheL1I()
     Err.Clear
     On Error GoTo 0
 
-    ' Cleanup: RAM(0..31) at 0, L1I invalid, counters at 0 and the row set to "-"
+    ' Cleanup
     For i = 0 To 31: RAM(i) = 0: Next i
     L1I = emptyLine
     Stats = emptyStats
@@ -233,21 +303,123 @@ Public Sub Test_CacheL1I()
     Debug.Print IIf(fails = 0, "Test_CacheL1I: ALL OK", "Test_CacheL1I: " & fails & " FAIL(S)")
 End Sub
 
-' For the PR screenshot: 4 consecutive instructions (8 bytes) and then byte 8.
-' Leaves the L1I row visible on the Memory sheet (A19:K20).
-' Afterwards run Test_CacheL1I to leave everything clean.
-Public Sub Demo_CacheL1I()
-    Dim i As Integer, hitsBefore As Long, v As Integer
-    Dim emptyStats As TStats, emptyLine As TCacheLine
-    For i = 0 To 15: RAM(i) = &H10 + i: Next i
+Public Sub Test_CacheL1D()
+    Dim fails As Integer, i As Integer, v As Integer
+    Dim ws As Worksheet, emptyStats As TStats, emptyLine As TCacheLine
+    Set ws = GetCacheSheet()
+
+    For i = 0 To 47: RAM(i) = 100 + i: Next i
+    L1D = emptyLine
     L1I = emptyLine
     Stats = emptyStats
-    Debug.Print "Demo_CacheL1I: 8 consecutive bytes from physical address 0, then byte 8"
-    For i = 0 To 8
-        hitsBefore = Stats.L1IHit
-        v = CacheReadL1I(i)
-        Debug.Print "  paddr " & i & " -> " & IIf(Stats.L1IHit > hitsBefore, "HIT ", "MISS") & "   data = " & Hex2(v)
+
+    ' 1) First LOAD: MISS, loads line 0
+    v = CacheReadL1D(0)
+    If v <> 100 Then fails = fails + 1: Debug.Print "  FAIL  1: CacheReadL1D(0) = " & v & " (expected 100)"
+    If Stats.L1DMiss <> 1 Or Stats.L1DHit <> 0 Then fails = fails + 1: Debug.Print "  FAIL  1: expected 1 miss and 0 hits"
+    If Not L1D.Valid Or L1D.tag <> 0 Then fails = fails + 1: Debug.Print "  FAIL  1: the line should be valid with tag 0"
+    If CStr(ws.Cells(L1D_ROW, 1).value) <> "L1D" Or CStr(ws.Cells(L1D_ROW, 2).value) <> "MISS" _
+       Or CStr(ws.Cells(L1D_ROW, 3).value) <> "0" Or CStr(ws.Cells(L1D_ROW, 4).value) <> "64" _
+       Or CStr(ws.Cells(L1D_ROW, 11).value) <> "6B" Then
+        fails = fails + 1: Debug.Print "  FAIL  1: row 21 should show L1D, MISS, tag 0, bytes 64..6B"
+    End If
+
+    ' 2) The other 7 bytes: 7 HITS
+    For i = 1 To 7
+        v = CacheReadL1D(i)
+        If v <> 100 + i Then fails = fails + 1: Debug.Print "  FAIL  2: CacheReadL1D(" & i & ") = " & v & " (expected " & 100 + i & ")"
     Next i
-    Debug.Print "  L1I: hits = " & Stats.L1IHit & ", misses = " & Stats.L1IMiss
+    If Stats.L1DHit <> 7 Or Stats.L1DMiss <> 1 Then fails = fails + 1: Debug.Print "  FAIL  2: 8 reads of one line must give 1 miss + 7 hits (" & Stats.L1DMiss & " miss, " & Stats.L1DHit & " hits)"
+    If CStr(ws.Cells(L1D_ROW, 2).value) <> "HIT" Then fails = fails + 1: Debug.Print "  FAIL  2: the sheet should show HIT"
+
+    ' 3) STORE hit: updates the L1D line AND RAM
+    CacheWriteL1D 3, 200
+    If L1D.Data(3) <> 200 Then fails = fails + 1: Debug.Print "  FAIL  3: the L1D line should hold 200 at byte 3"
+    If RAM(3) <> 200 Then fails = fails + 1: Debug.Print "  FAIL  3: write-through: RAM(3) should be 200"
+    If Stats.L1DHit <> 8 Or Stats.L1DMiss <> 1 Then fails = fails + 1: Debug.Print "  FAIL  3: a STORE hit must count as a hit (8 hits, 1 miss)"
+    If CStr(ws.Cells(L1D_ROW, 2).value) <> "HIT" Or CStr(ws.Cells(L1D_ROW, 7).value) <> "C8" Then fails = fails + 1: Debug.Print "  FAIL  3: the sheet should show HIT and C8 in B3"
+    v = CacheReadL1D(3)
+    If v <> 200 Or Stats.L1DHit <> 9 Then fails = fails + 1: Debug.Print "  FAIL  3: a LOAD after the STORE hit must be a HIT returning 200"
+
+    ' 4) STORE miss: the line is NOT loaded, RAM is written
+    CacheWriteL1D 20, 77
+    If RAM(20) <> 77 Then fails = fails + 1: Debug.Print "  FAIL  4: write-through: RAM(20) should be 77"
+    If Not L1D.Valid Or L1D.tag <> 0 Then fails = fails + 1: Debug.Print "  FAIL  4: no-write-allocate: L1D must still hold line 0"
+    If Stats.L1DMiss <> 2 Or Stats.L1DHit <> 9 Then fails = fails + 1: Debug.Print "  FAIL  4: a STORE miss must count as a miss (2 misses, 9 hits)"
+    If CStr(ws.Cells(L1D_ROW, 2).value) <> "MISS" Or CStr(ws.Cells(L1D_ROW, 3).value) <> "0" Then fails = fails + 1: Debug.Print "  FAIL  4: the sheet should show MISS and keep tag 0"
+
+    ' 5) LOAD after a STORE miss: MISS, returns the new value
+    v = CacheReadL1D(20)
+    If v <> 77 Then fails = fails + 1: Debug.Print "  FAIL  5: CacheReadL1D(20) = " & v & " (expected 77)"
+    If Stats.L1DMiss <> 3 Or L1D.tag <> 2 Then fails = fails + 1: Debug.Print "  FAIL  5: expected a MISS that loads tag 2"
+
+    ' 6) STORE miss with an INVALID line: it stays invalid
+    L1D.Valid = False
+    CacheWriteL1D 40, 5
+    If L1D.Valid Then fails = fails + 1: Debug.Print "  FAIL  6: a STORE miss must not make the line valid"
+    If RAM(40) <> 5 Or Stats.L1DMiss <> 4 Then fails = fails + 1: Debug.Print "  FAIL  6: RAM(40) should be 5 and the misses 4"
+    v = CacheReadL1D(40)
+    If v <> 5 Or Stats.L1DMiss <> 5 Then fails = fails + 1: Debug.Print "  FAIL  6: the LOAD must be a MISS returning 5"
+
+    ' 7) Values are stored as one byte (300 -> 44)
+    CacheWriteL1D 0, 300
+    If RAM(0) <> 44 Then fails = fails + 1: Debug.Print "  FAIL  7: RAM(0) should be 44 (300 And 255), got " & RAM(0)
+    If Stats.L1DMiss <> 6 Then fails = fails + 1: Debug.Print "  FAIL  7: expected 6 misses"
+
+    ' 8) L1D counters are independent from L1I
+    If Stats.L1IHit <> 0 Or Stats.L1IMiss <> 0 Then fails = fails + 1: Debug.Print "  FAIL  8: L1I counters must stay at 0"
+
+    ' 9) Physical address out of range (read and write)
+    On Error Resume Next
+    v = CacheReadL1D(256)
+    If Err.Number <> vbObjectError + 550 Then fails = fails + 1: Debug.Print "  FAIL  9: CacheReadL1D(256) did not raise error 550"
+    Err.Clear
+    CacheWriteL1D -1, 1
+    If Err.Number <> vbObjectError + 550 Then fails = fails + 1: Debug.Print "  FAIL  9: CacheWriteL1D(-1) did not raise error 550"
+    Err.Clear
+    On Error GoTo 0
+
+    ' Cleanup
+    For i = 0 To 47: RAM(i) = 0: Next i
+    L1D = emptyLine
+    L1I = emptyLine
+    Stats = emptyStats
+    ShowL1DLine "-"
+    If CStr(ws.Cells(L1D_ROW, 3).value) <> "-" Then fails = fails + 1: Debug.Print "  FAIL  cleanup: the L1D row was not reset to '-'"
+
+    Debug.Print IIf(fails = 0, "Test_CacheL1D: ALL OK", "Test_CacheL1D: " & fails & " FAIL(S)")
+End Sub
+
+' For the PR screenshot: LOAD miss, LOAD hit, STORE hit, STORE miss, LOAD after the miss.
+' Afterwards run Test_CacheL1D to leave everything clean.
+Public Sub Demo_CacheL1D()
+    Dim i As Integer, v As Integer, before As Long
+    Dim emptyStats As TStats, emptyLine As TCacheLine
+    For i = 0 To 31: RAM(i) = &H20 + i: Next i
+    L1D = emptyLine
+    Stats = emptyStats
+    Debug.Print "Demo_CacheL1D: write-through + no-write-allocate"
+
+    before = Stats.L1DHit
+    v = CacheReadL1D(0)
+    Debug.Print "  LOAD  paddr 0  -> " & IIf(Stats.L1DHit > before, "HIT ", "MISS") & "   data = " & Hex2(v)
+
+    before = Stats.L1DHit
+    v = CacheReadL1D(1)
+    Debug.Print "  LOAD  paddr 1  -> " & IIf(Stats.L1DHit > before, "HIT ", "MISS") & "   data = " & Hex2(v)
+
+    before = Stats.L1DHit
+    CacheWriteL1D 2, &HAA
+    Debug.Print "  STORE paddr 2  -> " & IIf(Stats.L1DHit > before, "HIT ", "MISS") & "   RAM = " & Hex2(RAM(2)) & ", line B2 = " & Hex2(L1D.Data(2))
+
+    before = Stats.L1DHit
+    CacheWriteL1D 12, &HBB
+    Debug.Print "  STORE paddr 12 -> " & IIf(Stats.L1DHit > before, "HIT ", "MISS") & "   RAM = " & Hex2(RAM(12)) & ", line NOT loaded (tag still " & L1D.tag & ")"
+
+    before = Stats.L1DHit
+    v = CacheReadL1D(12)
+    Debug.Print "  LOAD  paddr 12 -> " & IIf(Stats.L1DHit > before, "HIT ", "MISS") & "   data = " & Hex2(v)
+
+    Debug.Print "  L1D: hits = " & Stats.L1DHit & ", misses = " & Stats.L1DMiss
 End Sub
 
