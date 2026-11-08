@@ -128,6 +128,9 @@ Public Sub BuildCPUPanel(ByVal ws As Worksheet)
     AddKey ws, PFX_SIG & "CLK", PANEL_L + 8 + 13 * 44, y + 16, 32, 12, "CLK"
 
     RefreshCPUPanel
+    On Error Resume Next
+    EnsureISASheet
+    On Error GoTo 0
     Exit Sub
 EH:
     Debug.Print "BuildCPUPanel: ERROR " & Err.Number & " " & Err.Description
@@ -168,7 +171,7 @@ End Function
 Private Sub AddBusRow(ByVal ws As Worksheet, ByVal valName As String, _
         ByVal caption As String, ByVal wireName As String, ByVal y As Single)
     AddBox ws, valName, PANEL_L, y, 74, 12, caption, CLR_CHIP
-    UI_AddWire ws, wireName, PANEL_L + 82, y + 6, PANEL_L + 590, y + 6, 2.5
+    UI_AddWire ws, wireName, PANEL_L + 82, y + 6, 468, y + 6, 2.5
 End Sub
 
 Private Function ShortSig(ByVal nm As String) As String
@@ -418,18 +421,34 @@ Private Sub BuildTimeline(ByVal ws As Worksheet)
     Next i
 End Sub
 
+Private Sub EnsureISASheet()
+    Dim ws As Worksheet
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(SH_ISA)
+    On Error GoTo 0
+    If ws Is Nothing Then
+        BuildISASheet
+    ElseIf Len(Trim$(CStr(ws.Range("B2").Value))) = 0 Then
+        BuildISASheet
+    End If
+End Sub
+
 Private Sub BuildHistory(ByVal ws As Worksheet)
     Dim c As Integer
     Dim s As Shape
-    AddBox ws, "lbl_Hist", 578, 200, 72, 12, "LAST 8", CLR_CHIP
+    AddBox ws, "lbl_Hist", 488, 206, 150, 14, "LAST 8", CLR_CHIP
     For c = 1 To 8
-        Set s = UI_AddBox(ws, "hist_" & c, 578 + (c - 1) * 10, 214, 8, 60, ZeroBits(), CLR_CHIP)
+        Set s = UI_AddBox(ws, "hist_" & c, 488 + (c - 1) * 18, 222, 16, 112, ZeroBits(), CLR_CHIP)
         s.Line.Visible = msoTrue
         s.Line.ForeColor.RGB = CLR_BG
-        s.Line.Weight = 0.75
-        s.TextFrame2.TextRange.Font.Size = 5
+        s.Line.Weight = 1
+        s.TextFrame2.TextRange.Font.Size = 6
         s.TextFrame2.TextRange.Font.Name = "Consolas"
         s.TextFrame2.WordWrap = msoTrue
+        s.TextFrame2.MarginLeft = 0
+        s.TextFrame2.MarginRight = 0
+        s.TextFrame2.MarginTop = 0
+        s.TextFrame2.MarginBottom = 0
     Next c
 End Sub
 
