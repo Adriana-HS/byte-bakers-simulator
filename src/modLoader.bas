@@ -417,7 +417,7 @@ Private Sub AddLoaderButton(ByVal ws As Worksheet, ByVal nm As String, _
     s.TextFrame2.TextRange.Font.Name = "Segoe UI"
     s.TextFrame2.TextRange.Font.Size = 10
     s.TextFrame2.TextRange.Font.Bold = msoTrue
-    s.OnAction = macro
+    s.OnAction = "'" & ThisWorkbook.Name & "'!" & macro
 End Sub
 
 Private Function CatalogName(ByVal index As Integer) As String
