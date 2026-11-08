@@ -44,7 +44,7 @@ Public Sub BuildProgramsSheet()
     ws.Rows(5).RowHeight = 22
 
     For i = 1 To 3
-        ws.Rows(CAT_ROW + i - 1).RowHeight = 22
+        ws.Rows(CAT_ROW + i - 1).RowHeight = 24
         ws.Cells(CAT_ROW + i - 1, 1).Value = CatalogName(i)
         ws.Cells(CAT_ROW + i - 1, 2).Value = CatalogBlurb(i)
         ws.Cells(CAT_ROW + i - 1, 1).Font.Color = CLR_BG
@@ -61,15 +61,15 @@ Public Sub BuildProgramsSheet()
     ws.Range("A9:B9").Font.Bold = False
     ws.Range("A9:B9").Interior.Color = CLR_TEXT
 
-    ws.Rows(10).RowHeight = 40
-    ws.Range("A10:B10").Interior.Color = CLR_BG
-    AddLoaderButton ws, "btn_Use1", 12, ws.Rows(10).Top + 6, "USE 1", "BtnUse1"
-    AddLoaderButton ws, "btn_Use2", 94, ws.Rows(10).Top + 6, "USE 2", "BtnUse2"
-    AddLoaderButton ws, "btn_Use3", 176, ws.Rows(10).Top + 6, "USE 3", "BtnUse3"
-    AddLoaderButton ws, "btn_LVerify", 258, ws.Rows(10).Top + 6, "VERIFY", "BtnVerify"
-    AddLoaderButton ws, "btn_LLoad", 340, ws.Rows(10).Top + 6, "LOAD", "BtnLoad"
-    AddLoaderButton ws, "btn_LSave", 422, ws.Rows(10).Top + 6, "SAVE", "BtnSave"
-    AddLoaderButton ws, "btn_LSaved", 504, ws.Rows(10).Top + 6, "SAVED", "BtnUseSaved"
+    ws.Rows(10).RowHeight = 42
+    ws.Range("A10:C10").Interior.Color = CLR_BG
+    AddLoaderButton ws, "btn_Use1", 14, ws.Rows(10).Top + 7, "USE 1", "BtnUse1"
+    AddLoaderButton ws, "btn_Use2", 84, ws.Rows(10).Top + 7, "USE 2", "BtnUse2"
+    AddLoaderButton ws, "btn_Use3", 154, ws.Rows(10).Top + 7, "USE 3", "BtnUse3"
+    AddLoaderButton ws, "btn_LVerify", 224, ws.Rows(10).Top + 7, "VERIFY", "BtnVerify"
+    AddLoaderButton ws, "btn_LLoad", 294, ws.Rows(10).Top + 7, "LOAD", "BtnLoad"
+    AddLoaderButton ws, "btn_LSave", 364, ws.Rows(10).Top + 7, "SAVE", "BtnSave"
+    AddLoaderButton ws, "btn_LSaved", 434, ws.Rows(10).Top + 7, "SAVED", "BtnUseSaved"
 
     ws.Range("A11").Value = "2   EDITOR"
     ws.Range("B11").Value = "One instruction per row. Verify, then Load."
@@ -200,8 +200,8 @@ Public Sub SaveProgram(ByVal nm As String)
     ws.Range("A9").Font.Color = CLR_BG
     ws.Range("B9").Font.Color = CLR_BG
     ws.Range("A9").Font.Bold = True
-    ws.Range("A9").Interior.Color = CLR_LOAD
-    ws.Range("B9").Interior.Color = CLR_LOAD
+    ws.Range("A9").Interior.Color = CLR_SOFT
+    ws.Range("B9").Interior.Color = CLR_SOFT
     lines = EditorLines(ws)
     ws.Range("Z12:Z80").ClearContents
     For i = LBound(lines) To UBound(lines)
@@ -281,8 +281,8 @@ Private Sub MarkCatalog(ByVal ws As Worksheet, ByVal index As Integer)
         ws.Cells(CAT_ROW + i - 1, 1).Interior.Color = CLR_HIGHZ
         ws.Cells(CAT_ROW + i - 1, 2).Interior.Color = CLR_HIGHZ
     Next i
-    ws.Cells(CAT_ROW + index - 1, 1).Interior.Color = CLR_LOAD
-    ws.Cells(CAT_ROW + index - 1, 2).Interior.Color = CLR_LOAD
+    ws.Cells(CAT_ROW + index - 1, 1).Interior.Color = CLR_SOFT
+    ws.Cells(CAT_ROW + index - 1, 2).Interior.Color = CLR_SOFT
 End Sub
 
 Private Sub ClearEditor(ByVal ws As Worksheet)
@@ -300,7 +300,7 @@ Private Sub PaintEditorChrome(ByVal ws As Worksheet)
     rng.Font.Color = CLR_BG
     rng.Font.Bold = False
     For i = 1 To ED_ROWS
-        ws.Rows(ED_ROW + i - 1).RowHeight = 18
+        ws.Rows(ED_ROW + i - 1).RowHeight = 20
         ws.Cells(ED_ROW + i - 1, 1).Value = Right$("0" & CStr(i), 2)
         ws.Cells(ED_ROW + i - 1, 1).HorizontalAlignment = xlRight
     Next i
@@ -355,7 +355,10 @@ Private Sub AddLoaderButton(ByVal ws As Worksheet, ByVal nm As String, _
     On Error Resume Next
     ws.Shapes(nm).Delete
     On Error GoTo 0
-    Set s = UI_AddBox(ws, nm, l, t, 76, 28, txt, CLR_SOFT)
+    Set s = UI_AddBox(ws, nm, l, t, 64, 28, txt, CLR_SOFT)
+    s.Line.Visible = msoTrue
+    s.Line.ForeColor.RGB = CLR_BG
+    s.Line.Weight = 1
     s.TextFrame2.TextRange.Font.Name = "Segoe UI"
     s.TextFrame2.TextRange.Font.Size = 10
     s.TextFrame2.TextRange.Font.Bold = msoTrue
