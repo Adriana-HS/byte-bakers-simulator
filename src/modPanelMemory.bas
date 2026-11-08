@@ -15,6 +15,8 @@ Option Explicit
 ' UI_AnimateSwapIn (a block travels from the swap grid to the frame).
 ' Piece 5: UI_AnimateLineFill (a block travels from an L2 line to L1I/L1D).
 ' Piece 6a: replacement policy selector (pol_fifo / pol_lru, row 40).
+' Piece 6b: click on a page table row (A2:E17) -> its frame gets a thick
+' outline and the translation strip shows that page (OnPageTableClick).
 ' =====================================================================
 
 Private Const PANEL_TOP_ROW As Long = 28
@@ -39,6 +41,14 @@ Private Const FRAME_H As Single = 50
 Private Const CACHE_H As Single = 36
 Private Const CHIP_H As Single = 16
 Private Const PREVIEW_BYTES As Integer = 3
+Private Const HL_WEIGHT As Single = 4       ' outline weight of a highlighted frame
+
+' Piece 6b: which frame is highlighted (-1 = none) and its original outline
+Private hlPfn As Integer
+Private hlVisible As Long
+Private hlWeight As Single
+Private hlColor As Long
+Private hlActive As Boolean
 
 ' Draws (or redraws) the whole panel. Safe to call many times:
 ' UI_AddBox deletes a shape with the same name before creating it.
@@ -49,6 +59,9 @@ Public Sub BuildMemoryPanel()
     leftX = ws.Cells(1, 1).Left + 8
     topY = ws.Rows(PANEL_TOP_ROW).Top
     cacheY = topY + FRAME_H + 16
+
+    ' The frames are recreated, so any old highlight is gone
+    hlActive = False
 
     ' RAM frames 0..7 (frame 7 belongs to the I/O page, always pinned)
     For i = 0 To NUM_FRAMES - 1
@@ -116,6 +129,56 @@ End Sub
 Public Sub SetPolicyLRU()
     ReplacePolicy = POLICY_LRU
     PaintPolicySelector ThisWorkbook.Worksheets(SH_MEM)
+End Sub
+
+' ---------- Piece 6b: click on a page table row ----------
+
+' Called by Worksheet_SelectionChange of the Memory sheet.
+' If the selection is one row inside the page table (A2:E17):
+'  - the translation strip shows that page (offset 0), green or PAGE FAULT
+'  - if the page is in RAM, its frame gets a thick outline
+' Any other selection is ignored (the current highlight stays).
+Public Sub OnPageTableClick(ByVal target As Range)
+    Dim ws As Worksheet, vpn As Integer
+    Set ws = ThisWorkbook.Worksheets(SH_MEM)
+    If target.Rows.Count <> 1 Then Exit Sub
+    If Intersect(target, ws.Range("A2:E17")) Is Nothing Then Exit Sub
+
+    vpn = target.row - PT_FIRST_ROW
+    If vpn < 0 Or vpn >= NUM_VPAGES Then Exit Sub
+
+    If Not HasShape(ws, PFX_FRM & "0") Then BuildMemoryPanel
+    ClearFrameHighlight ws
+    ShowTranslation vpn, 0
+    If PageTable(vpn).Present Then HighlightFrame ws, PageTable(vpn).pfn
+End Sub
+
+' Thick outline on frame <pfn>. Remembers the original outline to restore it.
+Private Sub HighlightFrame(ByVal ws As Worksheet, ByVal pfn As Integer)
+    Dim shp As Shape
+    If pfn < 0 Or pfn >= NUM_FRAMES Then Exit Sub
+    If Not HasShape(ws, PFX_FRM & pfn) Then Exit Sub
+    Set shp = ws.Shapes(PFX_FRM & pfn)
+    hlVisible = shp.line.Visible
+    hlWeight = shp.line.weight
+    hlColor = shp.line.ForeColor.RGB
+    shp.line.Visible = msoTrue
+    shp.line.weight = HL_WEIGHT
+    shp.line.ForeColor.RGB = CLR_TEXT
+    hlPfn = pfn
+    hlActive = True
+End Sub
+
+' Gives the highlighted frame its original outline back
+Private Sub ClearFrameHighlight(ByVal ws As Worksheet)
+    Dim shp As Shape
+    If Not hlActive Then Exit Sub
+    hlActive = False
+    If Not HasShape(ws, PFX_FRM & hlPfn) Then Exit Sub
+    Set shp = ws.Shapes(PFX_FRM & hlPfn)
+    shp.line.weight = hlWeight
+    shp.line.ForeColor.RGB = hlColor
+    shp.line.Visible = hlVisible
 End Sub
 
 ' Repaints the panel from the current machine state:
@@ -590,5 +653,52 @@ Public Sub Test_PolicySelector()
     BuildMemoryPanel
 
     Debug.Print IIf(fails = 0, "Test_PolicySelector: ALL OK", "Test_PolicySelector: " & fails & " FAIL(S)")
+End Sub
+
+Public Sub Test_PageTableClick()
+    Dim fails As Integer, ws As Worksheet, t As String
+    Dim oldPte5 As TPageEntry, oldPte6 As TPageEntry, oldPte15 As TPageEntry
+    Set ws = ThisWorkbook.Worksheets(SH_MEM)
+    BuildMemoryPanel
+
+    ' Save the page table entries this test changes
+    oldPte5 = PageTable(5)
+    oldPte6 = PageTable(6)
+    oldPte15 = PageTable(15)
+
+    ' 1) Page 5 present in frame 2: click on its row (row 7) outlines frm_2
+    PageTable(5).Present = True
+    PageTable(5).pfn = 2
+    OnPageTableClick ws.Range("A7")
+    If ws.Shapes(PFX_FRM & "2").line.weight <> HL_WEIGHT Then fails = fails + 1: Debug.Print "  FAIL  1: frm_2 must have the thick outline"
+    If ws.Shapes(PFX_FRM & "3").line.weight = HL_WEIGHT Then fails = fails + 1: Debug.Print "  FAIL  1: frm_3 must not be outlined"
+    t = ws.Shapes(XLT_NAME).TextFrame2.TextRange.Text
+    If InStr(t, "VPN 5") = 0 Or InStr(t, "PFN 2") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: strip must show VPN 5 -> PFN 2, got: " & Replace(t, vbLf, "/")
+
+    ' 2) A click outside the page table does nothing
+    OnPageTableClick ws.Range("H3")
+    If ws.Shapes(PFX_FRM & "2").line.weight <> HL_WEIGHT Then fails = fails + 1: Debug.Print "  FAIL  2: a click outside A2:E17 must keep the outline"
+
+    ' 3) Page 6 not present: the outline of frm_2 goes away and the strip says PAGE FAULT
+    PageTable(6).Present = False
+    OnPageTableClick ws.Range("C8")
+    If ws.Shapes(PFX_FRM & "2").line.weight = HL_WEIGHT Then fails = fails + 1: Debug.Print "  FAIL  3: frm_2 must lose its outline"
+    t = ws.Shapes(XLT_NAME).TextFrame2.TextRange.Text
+    If InStr(t, "PAGE FAULT") = 0 Then fails = fails + 1: Debug.Print "  FAIL  3: strip must say PAGE FAULT, got: " & Replace(t, vbLf, "/")
+
+    ' 4) Page 15 (I/O) outlines frame 7. The test sets the entry itself,
+    '    so it does not depend on the state of the machine.
+    PageTable(15).Present = True
+    PageTable(15).pfn = IO_FRAME
+    OnPageTableClick ws.Range("A17")
+    If ws.Shapes(PFX_FRM & IO_FRAME).line.weight <> HL_WEIGHT Then fails = fails + 1: Debug.Print "  FAIL  4: frm_7 must have the thick outline for P15"
+
+    ' Cleanup: restore the entries and redraw the panel (this also clears the outline)
+    PageTable(5) = oldPte5
+    PageTable(6) = oldPte6
+    PageTable(15) = oldPte15
+    BuildMemoryPanel
+
+    Debug.Print IIf(fails = 0, "Test_PageTableClick: ALL OK", "Test_PageTableClick: " & fails & " FAIL(S)")
 End Sub
 
