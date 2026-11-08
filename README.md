@@ -161,15 +161,123 @@ flowchart LR
 
 ## 8. Mapa de memoria
 
-_Pendiente._
+El CPU trabaja con **direcciones virtuales** de 9 bits; la **MMU** las traduce a **direcciones físicas** de 8 bits antes de tocar la caché o la RAM.
+
+| Espacio | Ancho | Rango | Tamaño | Formato de la dirección |
+|---|---|---|---|---|
+| Virtual (PC, MAR) | 9 bits | `0x000`–`0x1FF` | 512 B = 16 páginas × 32 B | `[ VPN: 4 bits \| offset: 5 bits ]` |
+| Física (PADDR, RAM) | 8 bits | `0x00`–`0xFF` | 256 B = 8 marcos × 32 B | `[ PFN: 3 bits \| offset: 5 bits ]` |
+
+**Fórmulas de traducción:**
+
+```
+VPN    = vaddr \ 32        (división entera)
+offset = vaddr Mod 32
+paddr  = PFN * 32 + offset
+```
+
+Ejemplo: `vaddr = 0x0A3` (163) → `VPN = 5`, `offset = 3`. Si la página 5 está en el marco 2, entonces `paddr = 2 * 32 + 3 = 67 = 0x43`.
+
+**Reparto de páginas y marcos:**
+
+| Páginas virtuales | Marcos físicos | Comentario |
+|---|---|---|
+| 0–14 | 0–6 | Se paginan: 15 páginas compiten por 7 marcos, por eso hay Page Faults con reemplazo |
+| 15 | 7 (fijo) | Página de **E/S**: siempre presente (`Pinned`), nunca se desaloja y **nunca se cachea** |
+
+**Celdas de la página de E/S** (marco 7):
+
+| Celda | Dirección física | Dirección virtual |
+|---|---|---|
+| `KBD_HEAD` | `0xE0` | `0x1E0` |
+| `KBD_TAIL` | `0xE1` | `0x1E1` |
+| `LCD_CURSOR` | `0xE2` | `0x1E2` |
+| `KBD_COUNT` | `0xE3` | `0x1E3` |
+| Cola de teclado (8 B) | `0xF0`–`0xF7` | `0x1F0`–`0x1F7` |
+| Video LCD (8 B) | `0xF8`–`0xFF` | `0x1F8`–`0x1FF` |
 
 ## 9. Memoria virtual y paginación
 
-_Pendiente._
+La memoria virtual (`VMem`, 512 B) hace de **swap**; la RAM (256 B) guarda solo las páginas que están cargadas en algún marco. La **tabla de páginas** tiene una entrada por página (`PageTable(0..15)`) y `FrameOwner(0..7)` dice qué página ocupa cada marco (`-1` = libre).
+
+| Campo de la entrada | Para qué sirve |
+|---|---|
+| `Present` | la página está en un marco |
+| `PFN` | número de marco donde está |
+| `Dirty` | se escribió en RAM desde que se cargó |
+| `Ref` | se usó recientemente |
+| `LoadedAt` | reloj al cargarla (lo usa **FIFO**) |
+| `LastUse` | reloj del último acceso (lo usa **LRU**) |
+| `Pinned` | página fija (solo la 15) |
+
+**Flujo de un acceso y del Page Fault:**
+
+```mermaid
+flowchart TD
+  A[CPU emite vaddr de 9 bits] --> B[VPN = vaddr div 32, offset = vaddr mod 32]
+  B --> C{Present en la tabla de paginas?}
+  C -- Si --> D[paddr = PFN x 32 + offset]
+  C -- No --> E[PAGE FAULT]
+  E --> F{Hay marco libre?}
+  F -- Si --> J[Cargar la pagina desde VMem al marco]
+  F -- No --> G[Elegir victima segun politica, nunca una pagina Pinned]
+  G --> H{Victima Dirty?}
+  H -- Si --> I[Guardar el marco en el swap VMem]
+  H -- No --> K[Descartar sin guardar]
+  I --> L[Invalidar las lineas del marco en L1I, L1D y L2]
+  K --> L
+  L --> J
+  J --> M[Actualizar la tabla: Present, PFN, LoadedAt]
+  M --> D
+```
+
+**Políticas de reemplazo** (se cambian con el selector de la hoja `Memory`):
+
+| Política | Víctima | Característica |
+|---|---|---|
+| **FIFO** | la página con `LoadedAt` más antiguo | simple, pero puede desalojar una página muy usada (por ejemplo la del código) y sufre la anomalía de Belady |
+| **LRU** | la página con `LastUse` más antiguo | conserva lo que se usa seguido; no siempre gana (por ejemplo, un bucle secuencial sobre más páginas que marcos) |
+
+El reloj (`Clock`) suma 1 por cada micro-paso, de modo que sirve tanto para FIFO como para LRU. La página 15 nunca es víctima.
 
 ## 10. Jerarquía de caché L1I / L1D / L2
 
-_Pendiente._
+Las cachés trabajan con **direcciones físicas** (después de la MMU). Cada línea guarda 8 bytes y su `Tag = paddr \ 8`.
+
+| Caché | Tamaño | Organización | Quién la usa |
+|---|---|---|---|
+| **L1I** | 8 B (1 línea) | mapeo directo | solo el fetch de instrucciones |
+| **L1D** | 8 B (1 línea) | mapeo directo | solo `LOAD` / `STORE` |
+| **L2** | 32 B (4 líneas) | totalmente asociativa, reemplazo **LRU** | unificada (instrucciones y datos) |
+
+```mermaid
+flowchart LR
+  FETCH[Fetch de instruccion] --> L1I[L1I 8 B]
+  DATA[LOAD / STORE] --> L1D[L1D 8 B]
+  L1I -- miss --> L2[L2 32 B, 4 lineas, LRU]
+  L1D -- miss --> L2
+  L2 -- miss --> RAM[RAM 256 B]
+  RAM -- llena la linea --> L2
+  L2 -- llena la linea --> L1I
+  L2 -- llena la linea --> L1D
+```
+
+**Lecturas:** se busca en L1; si falla, en L2; si también falla, se trae la línea de 8 bytes desde la RAM, se guarda en L2 y luego en L1. Como cada instrucción mide 2 bytes y una línea guarda 8, **4 instrucciones seguidas dan 1 miss + 7 hits** en L1I (el fetch es byte a byte).
+
+**Política de escritura: write-through + no-write-allocate**
+
+- **Write-through:** cada escritura actualiza también la RAM, así que la RAM siempre está al día (costo: más tráfico hacia la RAM).
+- **No-write-allocate:** un `STORE` que falla **no** trae la línea a la caché; solo escribe en RAM.
+- Si la línea ya estaba en L1D o en L2, esa copia también se actualiza.
+- Las escrituras también cuentan como hit o miss en las estadísticas.
+
+**Excepciones y coherencia:**
+
+- La página 15 (E/S) **nunca se cachea**: `MemRead` y `MemWrite` la saltan.
+- Cuando un Page Fault desaloja un marco, `InvalidateFrame(pfn)` invalida las líneas de ese marco en L1I, L1D y L2.
+- El editor de RAM de la hoja `Memory` también llama a `InvalidateFrame`, para que la caché no devuelva un dato viejo.
+
+**Estadísticas** (`Stats`): aciertos y fallos de L1I, L1D y L2, y total de Page Faults; se muestran en la hoja `Memory` y en el panel MEMORY del Simulator.
 
 ## 11. Entrada/Salida: teclado y LCD 8x1
 
