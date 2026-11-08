@@ -30,6 +30,12 @@ Public Sub BuildProgramsSheet()
     ws.Columns("A").ColumnWidth = 18
     ws.Columns("B").ColumnWidth = 78
     ws.Columns("C").ColumnWidth = 14
+    ws.Range("A1").Value = "Assembler"
+    ws.Range("A1").Font.Name = "Segoe UI"
+    ws.Range("A1").Font.Size = 12
+    ws.Range("A1").Font.Bold = True
+    ws.Range("A1").Font.Color = CLR_BG
+    ws.Range("A1").Interior.Color = CLR_TEXT
     ws.Columns("A").Hidden = False
     ws.Columns("B").Hidden = False
     ws.Columns(26).Hidden = True
@@ -62,14 +68,14 @@ Public Sub BuildProgramsSheet()
     ws.Range("A9:B9").Interior.Color = CLR_TEXT
 
     ws.Rows(10).RowHeight = 42
-    ws.Range("A10:C10").Interior.Color = CLR_BG
-    AddLoaderButton ws, "btn_Use1", 14, ws.Rows(10).Top + 7, "USE 1", "BtnUse1"
-    AddLoaderButton ws, "btn_Use2", 84, ws.Rows(10).Top + 7, "USE 2", "BtnUse2"
-    AddLoaderButton ws, "btn_Use3", 154, ws.Rows(10).Top + 7, "USE 3", "BtnUse3"
-    AddLoaderButton ws, "btn_LVerify", 224, ws.Rows(10).Top + 7, "VERIFY", "BtnVerify"
-    AddLoaderButton ws, "btn_LLoad", 294, ws.Rows(10).Top + 7, "LOAD", "BtnLoad"
-    AddLoaderButton ws, "btn_LSave", 364, ws.Rows(10).Top + 7, "SAVE", "BtnSave"
-    AddLoaderButton ws, "btn_LSaved", 434, ws.Rows(10).Top + 7, "SAVED", "BtnUseSaved"
+    ws.Range("A10:C10").Interior.Color = CLR_TEXT
+    AddLoaderButton ws, "btn_Use1", 14, ws.Rows(10).Top + 7, "USE 1", "BtnUse1", CLR_HIGHZ
+    AddLoaderButton ws, "btn_Use2", 84, ws.Rows(10).Top + 7, "USE 2", "BtnUse2", CLR_HIGHZ
+    AddLoaderButton ws, "btn_Use3", 154, ws.Rows(10).Top + 7, "USE 3", "BtnUse3", CLR_HIGHZ
+    AddLoaderButton ws, "btn_LVerify", 224, ws.Rows(10).Top + 7, "VERIFY", "BtnVerify", CLR_LOAD
+    AddLoaderButton ws, "btn_LLoad", 294, ws.Rows(10).Top + 7, "LOAD", "BtnLoad", CLR_ACTIVE
+    AddLoaderButton ws, "btn_LSave", 364, ws.Rows(10).Top + 7, "SAVE", "BtnSave", CLR_TEXT
+    AddLoaderButton ws, "btn_LSaved", 434, ws.Rows(10).Top + 7, "SAVED", "BtnUseSaved", CLR_HIGHZ
 
     ws.Range("A11").Value = "2   EDITOR"
     ws.Range("B11").Value = "One instruction per row. Verify, then Load."
@@ -350,12 +356,13 @@ Private Function ProgSheet() As Worksheet
 End Function
 
 Private Sub AddLoaderButton(ByVal ws As Worksheet, ByVal nm As String, _
-        ByVal l As Single, ByVal t As Single, ByVal txt As String, ByVal macro As String)
+        ByVal l As Single, ByVal t As Single, ByVal txt As String, ByVal macro As String, _
+        ByVal fill As Long)
     Dim s As Shape
     On Error Resume Next
     ws.Shapes(nm).Delete
     On Error GoTo 0
-    Set s = UI_AddBox(ws, nm, l, t, 64, 28, txt, CLR_SOFT)
+    Set s = UI_AddBox(ws, nm, l, t, 64, 28, txt, fill)
     s.Line.Visible = msoTrue
     s.Line.ForeColor.RGB = CLR_BG
     s.Line.Weight = 1

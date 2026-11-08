@@ -289,8 +289,8 @@ Private Sub AddErr(ByVal lineNo As Long, ByVal msg As String)
 End Sub
 
 ' Status strip + first error on Programs sheet (never crashes).
-' Brand palette only: navy chip, cream strip, OK/ERROR word plus a
-' green or red left edge so the state does not depend on color alone.
+' Brand palette only. The title sits on cream, not a black chip.
+' OK/ERROR word plus a green or red left edge.
 Private Sub PaintAsmStatus(ByVal ok As Boolean)
     Dim ws As Worksheet
     Dim banner As Range
@@ -302,14 +302,14 @@ Private Sub PaintAsmStatus(ByVal ok As Boolean)
     Set ws = ThisWorkbook.Worksheets(SH_PROG)
     If ws Is Nothing Then Exit Sub
 
-    ws.Range("A1").Value = "ASSEMBLER"
+    ws.Range("A1").Value = "Assembler"
     ws.Range("A1").Font.Name = "Segoe UI"
     ws.Range("A1").Font.Size = 12
     ws.Range("A1").Font.Bold = True
-    ws.Range("A1").Font.Color = CLR_TEXT
-    ws.Range("A1").Interior.Color = CLR_BG
+    ws.Range("A1").Font.Color = CLR_BG
+    ws.Range("A1").Interior.Color = CLR_TEXT
     ws.Range("A1").HorizontalAlignment = xlLeft
-    ws.Range("A1").IndentLevel = 1
+    ws.Range("A1").IndentLevel = 0
     If ws.Columns("A").ColumnWidth < 15 Then ws.Columns("A").ColumnWidth = 15
 
     Set banner = ws.Range("B2:F2")
