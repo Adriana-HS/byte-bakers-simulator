@@ -289,11 +289,80 @@ _Pending._
 
 ## 13. User manual
 
-_Pending._
+The workbook is `excel/ByteBakers.xlsm`. Always open it from that folder in the repo. The public link ships with the v1.0.0 release.
+
+### Open it
+
+1. Open `excel/ByteBakers.xlsm`.
+2. If the yellow bar appears, click **Enable Content**.
+3. The sheets are along the bottom: **Simulator**, **Memory**, **Programs**, **Log**, **ISA**.
+
+### Simulator
+
+![Simulator panel](docs/img/manual-simulator.png)
+
+- **STEP** advances one micro-step. The top right shows the phase (`FETCH`, `DECODE` or `EXECUTE`), the real step (`F3  MDR -> IR, PC+1`) and `CLK n`.
+- **RUN** continues until `HLT` or until **PAUSE**.
+- **RESET** returns the machine to zero and clears the Log.
+- **DEMO** walks a short program.
+- Speed sits under the buttons: slow, normal, fast or instant.
+- The keyboard on the left writes into the queue. **POP** takes one key. The LCD shows what the program sends with `OUT`.
+- The eight frames on the right are a summary. Editing happens on the **Memory** sheet.
+
+### Load a program
+
+![Catalog and editor](docs/img/manual-programs.png)
+
+1. Go to **Programs**.
+2. **USE 1** loads the multiply program, **USE 2** the keyboard echo and **USE 3** the page-fault demo. The source drops into the editor.
+3. **VERIFY**. The status must say `OK` and how many bytes came out.
+4. **LOAD**. The program is now in virtual memory and the PC is back at 0.
+5. Return to **Simulator** and use **STEP** or **RUN**.
+
+**SAVE** stores the text you edited. **SAVED** opens it again.
+
+### Keyboard
+
+Load program 2, press **RUN**, and while it waits, tap letters on the **Simulator** keyboard. Each key shows up on the LCD. The program reads them with `IN AX, [KBD]`.
+
+### Log
+
+![Micro-step log](docs/img/manual-log.png)
+
+Every **STEP** adds a row. The title changes with the step number, the phase and the status (`OK`, `HALT` or `FAULT`). FETCH is coral, DECODE is amber and EXECUTE is green. Buses, signals and the cache are on the right (green for a hit, red for a miss).
+
+### ISA
+
+![ISA table and the collision button](docs/img/manual-isa.png)
+
+The table lists every instruction and colors the family. **FORCE COLLISION** deliberately turns on two data-bus drivers (`En_AX` and `En_BX`) and shows the validation error.
+
+### Memory
+
+![Page table and cache](docs/img/manual-memory.png)
+
+The page table starts at `A1`. A click on a row marks the frame and the translation. Cache lines and hit-rate bars sit below. FIFO / LRU and HEX / BIN / DEC change the view. A byte typed in hexadecimal in the grid is written to RAM.
 
 ## 14. Methodology
 
-_Pending — Gitflow, Kanban board, commit convention and task split._
+One issue, one branch `feature/<person>/<topic>`, one PR into `develop`. The merge is a merge commit, not a squash. `main` receives `develop` only at release.
+
+```mermaid
+flowchart TD
+  feature["feature/person/topic"] -->|merge commit| develop
+  develop -->|release| main
+  main --> tag["tag v1.0.0"]
+```
+
+The board is not skipped: **Backlog → To Do → In Progress → In Review → Done**. Done comes after the real merge.
+
+A commit message is `type(module): what it does (#issue)`. Examples: `feat(loader): ... (#31)`, `docs(readme): ... (#33)`. A feature branch does not commit the `.xlsm`.
+
+| Area | Person |
+|---|---|
+| CPU, ISA, buses, control word, cycle and release | Adriana |
+| Memory, paging, cache and program 3 | Karen |
+| Keyboard, LCD, assembler, programs 1 and 2, manual and brand | Misael |
 
 ## 15. Repository layout
 
