@@ -1,0 +1,1460 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Byte Bakers — Sustentación Oral Segundo Parcial</title>
+  <style>
+    :root {
+      --clr-bg: #111827;
+      --clr-surface: #1F2937;
+      --clr-surface-alt: #2D3748;
+      --clr-border: #374151;
+      --clr-text: #F1EFE8;
+      --clr-muted: #9CA3AF;
+      --clr-active: #D85A30;       /* Coral primario */
+      --clr-active-light: rgba(216, 90, 48, 0.15);
+      --clr-load: #EF9F27;         /* Ámbar */
+      --clr-load-light: rgba(239, 159, 39, 0.15);
+      --clr-highz: #B4B2A9;        /* Gris High-Z */
+      --clr-hit: #1D9E75;          /* Verde Hit */
+      --clr-hit-light: rgba(29, 158, 117, 0.15);
+      --clr-miss: #E24B4A;         /* Rojo Miss */
+      --clr-miss-light: rgba(226, 75, 74, 0.15);
+      --clr-fault: #A32D2D;        /* Rojo oscuro Page Fault */
+      --clr-lcd: #9BBC0F;          /* Verde display LCD */
+      --clr-lcd-bg: #0F380F;
+      --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      --font-mono: 'Cascadia Code', Consolas, 'Courier New', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--clr-bg);
+      color: var(--clr-text);
+      font-family: var(--font-sans);
+      line-height: 1.5;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      user-select: none;
+    }
+
+    /* TOP BAR / HEADER */
+    header {
+      height: 56px;
+      background: var(--clr-surface);
+      border-bottom: 1px solid var(--clr-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.5rem;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 50;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-weight: 700;
+      font-size: 1.1rem;
+    }
+
+    .brand-chip {
+      background: var(--clr-active);
+      color: #fff;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+    }
+
+    .speaker-pill {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--clr-surface-alt);
+      border: 1px solid var(--clr-border);
+      padding: 0.3rem 0.8rem;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: all 0.3s;
+    }
+
+    .speaker-pill.adriana { border-color: var(--clr-active); color: var(--clr-active); }
+    .speaker-pill.karen { border-color: var(--clr-load); color: var(--clr-load); }
+    .speaker-pill.misael { border-color: var(--clr-hit); color: var(--clr-hit); }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .timer-display {
+      font-family: var(--font-mono);
+      font-size: 1rem;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      border: 1px solid var(--clr-border);
+      color: #fff;
+    }
+
+    .btn-icon {
+      background: transparent;
+      border: 1px solid var(--clr-border);
+      color: var(--clr-text);
+      padding: 0.35rem 0.7rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+
+    .btn-icon:hover {
+      background: var(--clr-surface-alt);
+      border-color: var(--clr-muted);
+    }
+
+    /* MAIN CONTAINER / SLIDER */
+    main {
+      height: calc(100vh - 56px - 48px);
+      margin-top: 56px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .slide-deck {
+      height: 100%;
+      width: 100%;
+      position: relative;
+    }
+
+    .slide {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      padding: 2.5rem 4rem;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateX(40px);
+      transition: opacity 0.35s ease, transform 0.35s ease, visibility 0.35s;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .slide.active {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(0);
+      z-index: 10;
+    }
+
+    /* SLIDE COMPONENTS */
+    .slide-header {
+      margin-bottom: 1.5rem;
+    }
+
+    .slide-kicker {
+      text-transform: uppercase;
+      font-size: 0.8rem;
+      letter-spacing: 0.1em;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .kicker-adriana { color: var(--clr-active); }
+    .kicker-karen { color: var(--clr-load); }
+    .kicker-misael { color: var(--clr-hit); }
+
+    .slide-title {
+      font-size: 2.2rem;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .slide-subtitle {
+      color: var(--clr-muted);
+      font-size: 1.05rem;
+      margin-top: 0.25rem;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      flex: 1;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.2rem;
+      flex: 1;
+    }
+
+    .card {
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .card.highlight {
+      border-color: var(--clr-active);
+      box-shadow: 0 4px 20px rgba(216, 90, 48, 0.15);
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* INTERACTIVE WIDGETS */
+    .bus-wire {
+      height: 32px;
+      background: #1e293b;
+      border: 2px dashed var(--clr-highz);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      margin: 0.5rem 0;
+      transition: all 0.3s;
+    }
+
+    .bus-wire.active {
+      border: 2px solid var(--clr-active);
+      background: var(--clr-active-light);
+      color: var(--clr-active);
+      box-shadow: 0 0 12px rgba(216, 90, 48, 0.3);
+    }
+
+    .buffer-box {
+      background: var(--clr-surface-alt);
+      border: 1px solid var(--clr-border);
+      border-radius: 8px;
+      padding: 0.5rem 0.75rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0.25rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .buffer-box:hover {
+      transform: translateY(-2px);
+      border-color: var(--clr-active);
+    }
+
+    .cw-grid {
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      gap: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      text-align: center;
+      margin-top: 0.5rem;
+    }
+
+    .cw-bit {
+      background: var(--clr-surface-alt);
+      border: 1px solid var(--clr-border);
+      padding: 4px 2px;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+
+    .cw-bit.on {
+      background: var(--clr-active);
+      color: #fff;
+      font-weight: bold;
+    }
+
+    /* MEMORY CALCULATOR */
+    .calc-box {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 1rem;
+      border-radius: 8px;
+      border: 1px solid var(--clr-border);
+      font-family: var(--font-mono);
+    }
+
+    .calc-input {
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-active);
+      color: var(--clr-text);
+      font-family: var(--font-mono);
+      font-size: 1.1rem;
+      padding: 0.3rem 0.6rem;
+      border-radius: 6px;
+      width: 140px;
+      outline: none;
+    }
+
+    .calc-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0.4rem 0;
+      font-size: 0.95rem;
+    }
+
+    /* LCD SIMULATOR */
+    .lcd-display {
+      background: var(--clr-lcd);
+      color: var(--clr-lcd-bg);
+      font-family: var(--font-mono);
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      padding: 0.6rem 1.2rem;
+      border-radius: 6px;
+      border: 4px solid #0b290b;
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.5);
+      text-shadow: 1px 1px 0 rgba(0,0,0,0.2);
+      display: inline-block;
+    }
+
+    .demo-cue {
+      background: linear-gradient(135deg, rgba(216, 90, 48, 0.2), rgba(239, 159, 39, 0.1));
+      border: 2px solid var(--clr-active);
+      border-radius: 12px;
+      padding: 1.2rem;
+      margin-top: auto;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .demo-cue-icon {
+      font-size: 2rem;
+    }
+
+    /* FOOTER & CONTROLS */
+    footer {
+      height: 48px;
+      background: var(--clr-surface);
+      border-top: 1px solid var(--clr-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.5rem;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 50;
+    }
+
+    .progress-bar-container {
+      flex: 1;
+      height: 6px;
+      background: var(--clr-surface-alt);
+      border-radius: 3px;
+      margin: 0 1.5rem;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: var(--clr-active);
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    .keyboard-hint {
+      color: var(--clr-muted);
+      font-size: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .key-badge {
+      background: var(--clr-surface-alt);
+      border: 1px solid var(--clr-border);
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+    }
+
+    /* PRINT STYLES */
+    @media print {
+      body {
+        overflow: visible;
+        height: auto;
+        background: #fff;
+        color: #000;
+      }
+      header, footer, .btn-icon { display: none !important; }
+      main { margin: 0; height: auto; }
+      .slide {
+        position: relative;
+        opacity: 1;
+        visibility: visible;
+        transform: none;
+        page-break-after: always;
+        height: 100vh;
+        padding: 2rem;
+      }
+      .card { border-color: #ccc; background: #fafafa; color: #111; }
+      .bus-wire { border-color: #666; background: #eee; color: #111; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOP HEADER -->
+  <header>
+    <div class="brand">
+      <svg width="28" height="28" viewBox="0 0 1024 256">
+        <rect width="1024" height="256" rx="32" fill="#D85A30"/>
+        <text x="280" y="170" fill="#F1EFE8" font-family="Segoe UI, sans-serif" font-size="110" font-weight="bold">BB</text>
+      </svg>
+      <span>Byte Bakers</span>
+      <span class="brand-chip">SIS-131</span>
+    </div>
+
+    <div id="speakerPill" class="speaker-pill adriana">
+      <span id="speakerDot">●</span>
+      <span id="speakerName">Adriana (CPU & Buses)</span>
+    </div>
+
+    <div class="header-actions">
+      <div id="defenseTimer" class="timer-display" title="Cronómetro de Sustentación">00:00 / 20:00</div>
+      <button class="btn-icon" onclick="toggleTimer()" title="Pausar / Iniciar Reloj">⏱ Reloj</button>
+      <button class="btn-icon" onclick="resetTimer()" title="Reiniciar Reloj">↺</button>
+      <button class="btn-icon" onclick="toggleFullScreen()" title="Pantalla Completa (F)">⛶</button>
+    </div>
+  </header>
+
+  <!-- MAIN SLIDES CONTAINER -->
+  <main>
+    <div class="slide-deck" id="slideDeck">
+
+      <!-- SLIDE 1: PORTADA -->
+      <section class="slide active" data-speaker="Adriana" data-block="1">
+        <div style="text-align: center; margin: auto; max-width: 850px;">
+          <div style="display: inline-flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+            <svg width="80" height="80" viewBox="0 0 512 512">
+              <ellipse cx="256" cy="190" rx="150" ry="110" fill="#F1EFE8"/>
+              <ellipse cx="170" cy="210" rx="70" ry="55" fill="#F1EFE8"/>
+              <ellipse cx="342" cy="210" rx="70" ry="55" fill="#F1EFE8"/>
+              <rect x="118" y="250" width="276" height="88" rx="14" fill="#D85A30"/>
+              <g fill="#EF9F27">
+                <rect x="142" y="270" width="18" height="48" rx="3"/>
+                <rect x="174" y="270" width="18" height="48" rx="3"/>
+                <rect x="206" y="270" width="18" height="48" rx="3"/>
+                <rect x="238" y="270" width="18" height="48" rx="3"/>
+                <rect x="270" y="270" width="18" height="48" rx="3"/>
+                <rect x="302" y="270" width="18" height="48" rx="3"/>
+                <rect x="334" y="270" width="18" height="48" rx="3"/>
+                <rect x="366" y="270" width="18" height="48" rx="3"/>
+              </g>
+            </svg>
+            <div style="text-align: left;">
+              <h1 style="font-size: 3.2rem; font-weight: 900; letter-spacing: -0.03em; color: var(--clr-text);">Byte Bakers</h1>
+              <p style="font-family: var(--font-mono); color: var(--clr-active); font-size: 1.1rem; font-weight: 600;">8-bit computer architecture · 10110010</p>
+            </div>
+          </div>
+
+          <h2 style="font-size: 1.8rem; font-weight: 700; color: #fff; margin-bottom: 1rem;">
+            Simulador Avanzado de Computadora en Excel + VBA
+          </h2>
+          <p style="color: var(--clr-muted); font-size: 1.05rem; margin-bottom: 2rem;">
+            Buses tri-estado con High-Z · Memoria Virtual Paginada (512 B) · Caché multinivel L1/L2 · Periféricos mapeados (Teclado y LCD 8x1)
+          </p>
+
+          <div style="display: flex; justify-content: center; gap: 2rem; margin-top: 1.5rem;">
+            <div class="card" style="padding: 1rem 1.5rem; text-align: left; border-top: 4px solid var(--clr-active);">
+              <div style="font-size: 0.8rem; color: var(--clr-active); font-weight: 700;">BLOQUE 1 (0:00 - 6:40)</div>
+              <div style="font-weight: 700; font-size: 1.1rem;">Adriana</div>
+              <div style="font-size: 0.85rem; color: var(--clr-muted);">CPU, Buses & Palabra de Control</div>
+            </div>
+            <div class="card" style="padding: 1rem 1.5rem; text-align: left; border-top: 4px solid var(--clr-load);">
+              <div style="font-size: 0.8rem; color: var(--clr-load); font-weight: 700;">BLOQUE 2 (6:40 - 13:20)</div>
+              <div style="font-weight: 700; font-size: 1.1rem;">Karen</div>
+              <div style="font-size: 0.85rem; color: var(--clr-muted);">Memoria Virtual & Caché L1/L2</div>
+            </div>
+            <div class="card" style="padding: 1rem 1.5rem; text-align: left; border-top: 4px solid var(--clr-hit);">
+              <div style="font-size: 0.8rem; color: var(--clr-hit); font-weight: 700;">BLOQUE 3 (13:20 - 20:00)</div>
+              <div style="font-weight: 700; font-size: 1.1rem;">Misael</div>
+              <div style="font-size: 0.85rem; color: var(--clr-muted);">E/S, Software & Metodología</div>
+            </div>
+          </div>
+
+          <div style="margin-top: 2rem; font-size: 0.85rem; color: var(--clr-muted);">
+            Universidad Católica Boliviana "San Pablo" · Arquitectura de Computadoras (SIS-131) · Sustentación 2do Parcial
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 2: AGENDA Y CRONOMETRAJE EQUITATIVO -->
+      <section class="slide" data-speaker="Adriana" data-block="1">
+        <div class="slide-header">
+          <div class="slide-kicker kicker-adriana">Estructura de la Defensa · Criterio I3 (15 pts)</div>
+          <h2 class="slide-title">Plan de Defensa Oral & Demostración</h2>
+          <p class="slide-subtitle">Distribución equitativa: 6 minutos y 40 segundos exactos por expositor con demostración interactiva en vivo.</p>
+        </div>
+
+        <div class="grid-3">
+          <div class="card">
+            <div class="card-title" style="color: var(--clr-active);">1. Adriana (00:00 - 06:40)</div>
+            <ul style="margin-left: 1.2rem; font-size: 0.95rem; color: var(--clr-text); display: flex; flex-direction: column; gap: 0.5rem;">
+              <li>Arquitectura interna del CPU de 8 bits.</li>
+              <li>Buses: Dirección interna (9b) vs externa (8b).</li>
+              <li>Buffers tri-estado y detección de High-Z (-1).</li>
+              <li>Palabra de control (27 señales + reloj CLK).</li>
+              <li>Ciclo de micro-operaciones (Fetch F1-F6, Exec).</li>
+              <li><strong>Demo en vivo:</strong> Step a paso y botón "Forzar Colisión".</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <div class="card-title" style="color: var(--clr-load);">2. Karen (06:40 - 13:20)</div>
+            <ul style="margin-left: 1.2rem; font-size: 0.95rem; color: var(--clr-text); display: flex; flex-direction: column; gap: 0.5rem;">
+              <li>Memoria Virtual de 512 B sobre 256 B de RAM.</li>
+              <li>Fórmula de traducción matemática de la MMU.</li>
+              <li>Page Fault: desalojo a swap y dirty write-back.</li>
+              <li>Políticas de reemplazo: FIFO vs LRU.</li>
+              <li>Jerarquía de Caché: L1I, L1D y L2 unificada.</li>
+              <li><strong>Demo en vivo:</strong> Programa 3 (fallos) y edición de RAM.</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <div class="card-title" style="color: var(--clr-hit);">3. Misael (13:20 - 20:00)</div>
+            <ul style="margin-left: 1.2rem; font-size: 0.95rem; color: var(--clr-text); display: flex; flex-direction: column; gap: 0.5rem;">
+              <li>Teclado interactivo (cola circular 8 bytes).</li>
+              <li>Display LCD 8x1 conectado a video buffer.</li>
+              <li>Instrucciones IN y OUT sobre buses tri-estado.</li>
+              <li>Ensamblador de dos pasadas y cargador VMem.</li>
+              <li>Metodología Gitflow, Kanban y métricas.</li>
+              <li><strong>Demo en vivo:</strong> Programa 2 con texto en LCD.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 3: ADRIANA - ARQUITECTURA DEL CPU -->
+      <section class="slide" data-speaker="Adriana" data-block="1">
+        <div class="slide-header">
+          <div class="slide-kicker kicker-adriana">Bloque 1 · Adriana</div>
+          <h2 class="slide-title">Arquitectura del CPU de 8 Bits</h2>
+          <p class="slide-subtitle">Banco de registros, unidad aritmético-lógica (ALU) y registros de control de micro-pasos.</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">Banco de Registros & Control</div>
+            <table style="width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.85rem;">
+              <thead>
+                <tr style="border-bottom: 1px solid var(--clr-border); text-align: left; color: var(--clr-muted);">
+                  <th style="padding: 0.4rem 0;">Registro</th>
+                  <th>Ancho</th>
+                  <th>Rango</th>
+                  <th>Función</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <td style="color: var(--clr-active); font-weight: bold;">AX, BX, CX, DX</td>
+                  <td>8 bits</td>
+                  <td>0..255</td>
+                  <td>Propósito general con wrap a 8 bits</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <td style="color: var(--clr-load); font-weight: bold;">PC</td>
+                  <td>9 bits</td>
+                  <td>0..511</td>
+                  <td>Contador de programa (dirección virtual)</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <td style="color: var(--clr-load); font-weight: bold;">MAR</td>
+                  <td>9 bits</td>
+                  <td>0..511</td>
+                  <td>Registro de dirección de memoria (virtual)</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <td style="color: var(--clr-hit); font-weight: bold;">PADDR</td>
+                  <td>8 bits</td>
+                  <td>0..255</td>
+                  <td>Dirección física generada por la MMU</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <td>MDR</td>
+                  <td>8 bits</td>
+                  <td>0..255</td>
+                  <td>Buffer de datos de memoria / E/S</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <td>IR</td>
+                  <td>16 bits</td>
+                  <td>2 bytes</td>
+                  <td>Instrucción actual completa</td>
+                </tr>
+                <tr>
+                  <td>TA, TB</td>
+                  <td>8 bits</td>
+                  <td>0..255</td>
+                  <td>Temporarios operados por la ALU</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <div class="card-title">ALU & Flags de Estado</div>
+            <p style="font-size: 0.95rem; margin-bottom: 1rem;">
+              La ALU opera sobre los temporarios <span style="font-family: var(--font-mono); color: var(--clr-active);">TA</span> y <span style="font-family: var(--font-mono); color: var(--clr-active);">TB</span>, y expone su resultado al bus de datos mediante el buffer <span style="font-family: var(--font-mono); color: var(--clr-load);">En_ALU</span>.
+            </p>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; text-align: center; margin-bottom: 1rem;">
+              <div style="background: var(--clr-surface-alt); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--clr-border);">
+                <div style="font-weight: 800; font-size: 1.3rem; color: var(--clr-active);">ZF</div>
+                <div style="font-size: 0.75rem; color: var(--clr-muted);">Zero Flag</div>
+                <div style="font-size: 0.7rem; margin-top: 0.2rem;">Resultado = 0</div>
+              </div>
+              <div style="background: var(--clr-surface-alt); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--clr-border);">
+                <div style="font-weight: 800; font-size: 1.3rem; color: var(--clr-load);">CF</div>
+                <div style="font-size: 0.75rem; color: var(--clr-muted);">Carry Flag</div>
+                <div style="font-size: 0.7rem; margin-top: 0.2rem;">Acarreo o préstamo</div>
+              </div>
+              <div style="background: var(--clr-surface-alt); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--clr-border);">
+                <div style="font-weight: 800; font-size: 1.3rem; color: var(--clr-hit);">SF</div>
+                <div style="font-size: 0.75rem; color: var(--clr-muted);">Sign Flag</div>
+                <div style="font-size: 0.7rem; margin-top: 0.2rem;">Bit 7 activo (<0)</div>
+              </div>
+            </div>
+            <div style="background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: 6px; font-size: 0.85rem;">
+              <strong>Operaciones soportadas:</strong> ADD, SUB, INC, DEC, CMP (resta solo para flags), AND, OR, XOR.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 4: ADRIANA - BUSES DEL SISTEMA Y HIGH-Z -->
+      <section class="slide" data-speaker="Adriana" data-block="1">
+        <div class="slide-header">
+          <div class="slide-kicker kicker-adriana">Buses del Sistema · Criterio G1 (20 pts)</div>
+          <h2 class="slide-title">Buses Tri-Estado & Detección de Colisiones</h2>
+          <p class="slide-subtitle">Separación rigurosa de anchos: bus interno de 9 bits vs bus externo de 8 bits y bus de datos bidireccional.</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">Topología de Buses & Anchos</div>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.2rem;">
+                  <span style="font-weight: 600; color: var(--clr-active);">Bus Interno de Direcciones (9 bits)</span>
+                  <span style="font-family: var(--font-mono); color: var(--clr-muted);">PC / IR_addr → MAR</span>
+                </div>
+                <div class="bus-wire" id="wireIntAddr">
+                  <span>DRIVER: En_PC (PC = 0x040)</span>
+                  <span style="color: var(--clr-active); font-weight: bold;">VALOR: 0x040 (9b)</span>
+                </div>
+              </div>
+
+              <div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.2rem;">
+                  <span style="font-weight: 600; color: var(--clr-hit);">Bus Externo de Direcciones (8 bits)</span>
+                  <span style="font-family: var(--font-mono); color: var(--clr-muted);">MMU (PADDR) → RAM/Caché</span>
+                </div>
+                <div class="bus-wire" id="wireExtAddr">
+                  <span>DRIVER: MMU (PFN=1, offset=0)</span>
+                  <span style="color: var(--clr-hit); font-weight: bold;">PADDR: 0x20 (8b)</span>
+                </div>
+              </div>
+
+              <div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.2rem;">
+                  <span style="font-weight: 600; color: var(--clr-load);">Bus de Datos Bidireccional (8 bits)</span>
+                  <span style="font-family: var(--font-mono); color: var(--clr-muted);">Regs ↔ MDR ↔ Caché / E/S</span>
+                </div>
+                <div class="bus-wire active" id="wireData">
+                  <span>DRIVER: En_MDR</span>
+                  <span style="color: var(--clr-load); font-weight: bold;">DATO: 0x28 ('(')</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="margin-top: 1rem; font-size: 0.85rem; color: var(--clr-muted);">
+              💡 <em>Línea de defensa: "PC y MAR son de 9 bits porque manejan espacio virtual de 512 B. La RAM es de 8 bits (256 B). La MMU se ubica exactamente entre ambos buses."</em>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Buffers Tri-Estado & Estados Dinámicos</div>
+            <p style="font-size: 0.9rem; margin-bottom: 0.8rem;">
+              Cada componente conectado al bus pasa por un buffer tri-estado gobernado por señales <span style="font-family: var(--font-mono); color: var(--clr-active);">En_*</span> (conducir) y <span style="font-family: var(--font-mono); color: var(--clr-load);">Ld_*</span> (cargar).
+            </p>
+
+            <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem;">
+              <span class="buffer-box" style="border-color: var(--clr-active); color: var(--clr-active);">buf_PC: ACTIVO</span>
+              <span class="buffer-box">buf_AX: High-Z (-1)</span>
+              <span class="buffer-box">buf_BX: High-Z (-1)</span>
+              <span class="buffer-box">buf_CX: High-Z (-1)</span>
+              <span class="buffer-box">buf_ALU: High-Z (-1)</span>
+              <span class="buffer-box" style="border-color: var(--clr-load); color: var(--clr-load);">buf_MDR: CARGANDO</span>
+              <span class="buffer-box">buf_KBD: High-Z (-1)</span>
+              <span class="buffer-box">buf_LCD: High-Z (-1)</span>
+            </div>
+
+            <div style="background: rgba(226, 75, 74, 0.1); border: 1px solid var(--clr-miss); border-radius: 8px; padding: 0.8rem; font-size: 0.85rem;">
+              <strong style="color: var(--clr-miss);">Regla de Exclusión de Conductor Único:</strong>
+              <p style="margin-top: 0.2rem;">Si más de una señal <span style="font-family: var(--font-mono);">En_*</span> se activa sobre el mismo bus en un mismo micro-paso, se dispara la excepción de <em>Bus Collision</em> y el simulador detiene el ciclo.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 5: ADRIANA - PALABRA DE CONTROL Y CICLO -->
+      <section class="slide" data-speaker="Adriana" data-block="1">
+        <div class="slide-header">
+          <div class="slide-kicker kicker-adriana">Unidad de Control · Criterio G1 y G5</div>
+          <h2 class="slide-title">Palabra de Control (27 Señales) & Ciclo</h2>
+          <p class="slide-subtitle">27 señales decodificadas como bits de un Long más el pulso del reloj CLK en cada micro-paso.</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">Franja de 27 Señales Decodificadas</div>
+            <p style="font-size: 0.85rem; color: var(--clr-muted); margin-bottom: 0.5rem;">Bits 0..26. Las señales encendidas se iluminan en color coral/ámbar; el resto permanece en gris inactivo:</p>
+            
+            <div class="cw-grid">
+              <div class="cw-bit on" title="Bit 0: En_PC">En_PC</div>
+              <div class="cw-bit" title="Bit 1: Ld_PC">Ld_PC</div>
+              <div class="cw-bit" title="Bit 2: Inc_PC">Inc_PC</div>
+              <div class="cw-bit on" title="Bit 3: Ld_MAR">Ld_MAR</div>
+              <div class="cw-bit" title="Bit 4: Ld_MDR">Ld_MDR</div>
+              <div class="cw-bit" title="Bit 5: En_MDR">En_MDR</div>
+              <div class="cw-bit" title="Bit 6: Ld_IR">Ld_IR</div>
+              <div class="cw-bit" title="Bit 7: En_IR_A">En_IR_A</div>
+              <div class="cw-bit" title="Bit 8: En_AX">En_AX</div>
+              <div class="cw-bit" title="Bit 9: En_BX">En_BX</div>
+              <div class="cw-bit" title="Bit 10: En_CX">En_CX</div>
+              <div class="cw-bit" title="Bit 11: En_DX">En_DX</div>
+              <div class="cw-bit" title="Bit 12: Ld_AX">Ld_AX</div>
+              <div class="cw-bit" title="Bit 13: Ld_BX">Ld_BX</div>
+              <div class="cw-bit" title="Bit 14: Ld_CX">Ld_CX</div>
+              <div class="cw-bit" title="Bit 15: Ld_DX">Ld_DX</div>
+              <div class="cw-bit" title="Bit 16: Ld_TA">Ld_TA</div>
+              <div class="cw-bit" title="Bit 17: Ld_TB">Ld_TB</div>
+              <div class="cw-bit" title="Bit 18: En_ALU">En_ALU</div>
+              <div class="cw-bit" title="Bit 19: Ld_FLAGS">Ld_FL</div>
+              <div class="cw-bit" title="Bit 20: Mem_R">Mem_R</div>
+              <div class="cw-bit" title="Bit 21: Mem_W">Mem_W</div>
+              <div class="cw-bit" title="Bit 22: IO_R">IO_R</div>
+              <div class="cw-bit" title="Bit 23: IO_W">IO_W</div>
+              <div class="cw-bit" title="Bit 24: En_KBD">En_KBD</div>
+              <div class="cw-bit" title="Bit 25: Ld_LCD">Ld_LCD</div>
+              <div class="cw-bit" title="Bit 26: En_IR_D">En_IR_D</div>
+            </div>
+
+            <div style="margin-top: 1.2rem; background: var(--clr-surface-alt); padding: 0.8rem; border-radius: 8px; font-size: 0.85rem;">
+              <div style="font-weight: 700; color: var(--clr-load); margin-bottom: 0.25rem;">Micro-paso actual: F1 (Fetch byte 1)</div>
+              <div style="font-family: var(--font-mono);">CW = 0x00000009 (En_PC, Ld_MAR) → Transferencia: PC → MAR</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Ciclo de Instrucción (F1-F6 → Decode → Execute)</div>
+            <div style="font-family: var(--font-mono); font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.4rem;">
+              <div style="padding: 0.35rem 0.6rem; background: rgba(216,90,48,0.15); border-left: 3px solid var(--clr-active); border-radius: 4px;">
+                <strong>F1:</strong> En_PC, Ld_MAR <span style="color: var(--clr-muted);">(PC → MAR)</span>
+              </div>
+              <div style="padding: 0.35rem 0.6rem; background: rgba(216,90,48,0.15); border-left: 3px solid var(--clr-active); border-radius: 4px;">
+                <strong>F2:</strong> Mem_R, Ld_MDR <span style="color: var(--clr-muted);">(MMU: MAR→PADDR; M[PADDR]→MDR)</span>
+              </div>
+              <div style="padding: 0.35rem 0.6rem; background: rgba(216,90,48,0.15); border-left: 3px solid var(--clr-active); border-radius: 4px;">
+                <strong>F3:</strong> En_MDR, Ld_IR, Inc_PC <span style="color: var(--clr-muted);">(MDR→IR_hi, PC+1)</span>
+              </div>
+              <div style="padding: 0.35rem 0.6rem; background: rgba(216,90,48,0.15); border-left: 3px solid var(--clr-active); border-radius: 4px;">
+                <strong>F4-F6:</strong> Repite para el byte bajo de la instrucción fija de 2 bytes
+              </div>
+              <div style="padding: 0.35rem 0.6rem; background: rgba(239,159,39,0.15); border-left: 3px solid var(--clr-load); border-radius: 4px;">
+                <strong>DECODE:</strong> Opcode (5 bits), Registro destino (2 bits), A8 (1 bit)
+              </div>
+              <div style="padding: 0.35rem 0.6rem; background: rgba(29,158,117,0.15); border-left: 3px solid var(--clr-hit); border-radius: 4px;">
+                <strong>EXECUTE (E1..En):</strong> Micro-operaciones específicas de la ISA
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="demo-cue">
+          <div class="demo-cue-icon">⚡</div>
+          <div style="flex: 1;">
+            <div style="font-weight: 700; color: #fff; font-size: 1.05rem;">Paso a Demostración en Vivo — Adriana</div>
+            <div style="font-size: 0.9rem; color: var(--clr-muted);">
+              Ir a la hoja <strong>Simulator</strong> de Excel: presionar <strong>STEP</strong> observando los buffers en coral/ámbar, el timeline y pulsar <strong>FORCE COLLISION</strong> en la hoja ISA.
+            </div>
+          </div>
+          <div class="brand-chip" style="font-size: 0.9rem; padding: 0.4rem 0.8rem;">Live Excel Demo</div>
+        </div>
+      </section>
+
+      <!-- SLIDE 6: KAREN - MEMORIA VIRTUAL Y PAGINACIÓN -->
+      <section class="slide" data-speaker="Karen" data-block="2">
+        <div class="slide-header">
+          <div class="slide-kicker kicker-karen">Bloque 2 · Karen</div>
+          <h2 class="slide-title">Memoria Virtual Paginada (512 B sobre 256 B RAM)</h2>
+          <p class="slide-subtitle">Traducción de direcciones en hardware virtual, tabla de páginas de 16 entradas y página fija de E/S.</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">Fórmulas Matemáticas de Traducción</div>
+            <div class="calc-box">
+              <div style="margin-bottom: 0.75rem; color: var(--clr-load);">
+                <strong>Dirección Virtual (9 bits):</strong> 0x000 .. 0x1FF
+              </div>
+              <div class="calc-row">
+                <span>VPN (Número de página virtual):</span>
+                <span style="color: var(--clr-active); font-weight: bold;">vaddr \ 32 (4 bits)</span>
+              </div>
+              <div class="calc-row">
+                <span>Offset dentro de la página:</span>
+                <span style="color: var(--clr-active); font-weight: bold;">vaddr Mod 32 (5 bits)</span>
+              </div>
+              <div class="calc-row" style="border-top: 1px solid var(--clr-border); padding-top: 0.4rem;">
+                <span>Dirección Física (8 bits):</span>
+                <span style="color: var(--clr-hit); font-weight: bold;">paddr = PFN * 32 + offset</span>
+              </div>
+            </div>
+
+            <div style="margin-top: 1rem;">
+              <div style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem;">Probador de Traducción en Vivo:</div>
+              <div style="display: flex; gap: 0.75rem; align-items: center;">
+                <input type="text" id="demoVAddr" class="calc-input" value="0x0A3" oninput="updateLiveTranslation()">
+                <div id="demoCalcResult" style="font-family: var(--font-mono); font-size: 0.9rem; color: var(--clr-hit);">
+                  VPN: 5, Offset: 3 → paddr: 0x43
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Estructura de la Tabla de Páginas (16 Entradas)</div>
+            <table style="width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.8rem;">
+              <thead>
+                <tr style="border-bottom: 1px solid var(--clr-border); text-align: left; color: var(--clr-muted);">
+                  <th>Bit</th>
+                  <th>Campo</th>
+                  <th>Propósito</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <td style="color: var(--clr-hit); font-weight: bold;">P</td>
+                  <td>Present</td>
+                  <td>1 = cargada en RAM, 0 = en Swap (Page Fault)</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <td style="color: var(--clr-load); font-weight: bold;">PFN</td>
+                  <td>Physical Frame</td>
+                  <td>Marco físico asignado (0..7)</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <td style="color: var(--clr-miss); font-weight: bold;">D</td>
+                  <td>Dirty</td>
+                  <td>1 = modificada; exige guardarse en swap al desalojar</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <td>R</td>
+                  <td>Referenced</td>
+                  <td>1 = accedida recientemente (usada por políticas)</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                  <td>Ld</td>
+                  <td>LoadedAt</td>
+                  <td>Reloj al momento de carga (para FIFO)</td>
+                </tr>
+                <tr>
+                  <td>Lu</td>
+                  <td>LastUse</td>
+                  <td>Reloj del último acceso (para LRU)</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div style="margin-top: 0.8rem; background: var(--clr-surface-alt); padding: 0.6rem; border-radius: 6px; font-size: 0.8rem;">
+              <strong style="color: var(--clr-load);">Página 15 (E/S):</strong> Siempre fija en el Marco 7 (<span style="font-family: var(--font-mono);">Pinned</span>). Nunca se desaloja y nunca se cachea.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 7: KAREN - PAGE FAULT Y FIFO VS LRU -->
+      <section class="slide" data-speaker="Karen" data-block="2">
+        <div class="slide-header">
+          <div class="slide-kicker kicker-karen">Paginación por Demanda · Criterio G3 (15 pts)</div>
+          <h2 class="slide-title">Manejo de Page Faults & Políticas de Reemplazo</h2>
+          <p class="slide-subtitle">Interrupción transparente, desalojo a swap, invalidación de cachés y reanudación de instrucción.</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">Secuencia Exacta de un Page Fault</div>
+            <ol style="margin-left: 1.2rem; font-size: 0.88rem; display: flex; flex-direction: column; gap: 0.4rem;">
+              <li><strong>Detección:</strong> CPU intenta acceder a una dirección con bit <span style="font-family: var(--font-mono); color: var(--clr-miss);">Present = 0</span>.</li>
+              <li><strong>Marco libre:</strong> Si hay un marco disponible (0..6), se toma directamente.</li>
+              <li><strong>Selección de víctima:</strong> Si la RAM está llena, se aplica la política (FIFO o LRU). La página 15 nunca es víctima.</li>
+              <li><strong>Write-back:</strong> Si la víctima tiene <span style="font-family: var(--font-mono); color: var(--clr-miss);">Dirty = 1</span>, se escribe de vuelta en el swap de VMem.</li>
+              <li><strong>Coherencia de Caché:</strong> Se invalidan todas las líneas del marco desalojado en L1I, L1D y L2 (<span style="font-family: var(--font-mono);">InvalidateFrame</span>).</li>
+              <li><strong>Carga:</strong> Se copian los 32 bytes de la página requerida desde VMem al marco.</li>
+              <li><strong>Reanudación:</strong> Se marca <span style="font-family: var(--font-mono); color: var(--clr-hit);">Present = 1</span> y la instrucción se reanuda limpiamente.</li>
+            </ol>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Comparativa: FIFO vs LRU (Programa 3)</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+              <div style="background: var(--clr-surface-alt); padding: 0.8rem; border-radius: 8px; border-left: 4px solid var(--clr-miss);">
+                <div style="font-weight: 700; color: var(--clr-miss);">FIFO</div>
+                <div style="font-size: 0.8rem; color: var(--clr-muted);">Oldest LoadedAt</div>
+                <div style="font-size: 0.85rem; margin-top: 0.3rem;">Desaloja la página de código a pesar de usarse en cada fetch. Sufre de la anomalía de Belady.</div>
+                <div style="font-family: var(--font-mono); font-size: 1.1rem; color: var(--clr-miss); font-weight: bold; margin-top: 0.3rem;">~28 Fallos</div>
+              </div>
+
+              <div style="background: var(--clr-surface-alt); padding: 0.8rem; border-radius: 8px; border-left: 4px solid var(--clr-hit);">
+                <div style="font-weight: 700; color: var(--clr-hit);">LRU</div>
+                <div style="font-size: 0.8rem; color: var(--clr-muted);">Oldest LastUse</div>
+                <div style="font-size: 0.85rem; margin-top: 0.3rem;">Mantiene la página de código en memoria porque registra accesos continuos.</div>
+                <div style="font-family: var(--font-mono); font-size: 1.1rem; color: var(--clr-hit); font-weight: bold; margin-top: 0.3rem;">~25 Fallos</div>
+              </div>
+            </div>
+
+            <div style="background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: 6px; font-size: 0.8rem;">
+              🎯 <strong>Defensa oral:</strong> <em>"LRU no siempre gana; en recorridos secuenciales cíclicos sobre más páginas que marcos, LRU falla en cada acceso al desalojar justo lo que viene."</em>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 8: KAREN - JERARQUÍA DE CACHÉ L1/L2 -->
+      <section class="slide" data-speaker="Karen" data-block="2">
+        <div class="slide-header">
+          <div class="slide-kicker kicker-karen">Jerarquía de Memoria · Criterio G2 (15 pts)</div>
+          <h2 class="slide-title">Caché Multinivel L1I / L1D / L2 con Write-Through</h2>
+          <p class="slide-subtitle">Líneas de 8 bytes, detección de aciertos/fallos en lecturas y escrituras, y barras de estadísticas sincronizadas.</p>
+        </div>
+
+        <div class="grid-3">
+          <div class="card">
+            <div class="card-title" style="color: var(--clr-active);">L1I (Instrucciones)</div>
+            <ul style="font-size: 0.85rem; margin-left: 1rem; display: flex; flex-direction: column; gap: 0.3rem;">
+              <li><strong>Tamaño:</strong> 8 Bytes (1 línea).</li>
+              <li><strong>Mapeo:</strong> Directo.</li>
+              <li><strong>Uso:</strong> Exclusivo del fetch de instrucciones (F2 y F5).</li>
+              <li><strong>Localidad espacial:</strong> Como cada instrucción mide 2 bytes, 4 instrucciones consecutivas dan <strong>1 Miss + 7 Hits</strong>.</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <div class="card-title" style="color: var(--clr-load);">L1D (Datos)</div>
+            <ul style="font-size: 0.85rem; margin-left: 1rem; display: flex; flex-direction: column; gap: 0.3rem;">
+              <li><strong>Tamaño:</strong> 8 Bytes (1 línea).</li>
+              <li><strong>Mapeo:</strong> Directo.</li>
+              <li><strong>Uso:</strong> Solo LOAD y STORE.</li>
+              <li><strong>Política de escritura:</strong> <em>Write-Through</em> + <em>No-Write-Allocate</em>.</li>
+              <li>Un STORE miss escribe directamente en RAM sin traer la línea a caché.</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <div class="card-title" style="color: var(--clr-hit);">L2 (Unificada)</div>
+            <ul style="font-size: 0.85rem; margin-left: 1rem; display: flex; flex-direction: column; gap: 0.3rem;">
+              <li><strong>Tamaño:</strong> 32 Bytes (4 líneas de 8 B).</li>
+              <li><strong>Mapeo:</strong> Totalmente asociativa.</li>
+              <li><strong>Reemplazo:</strong> LRU (línea con menor reloj de uso).</li>
+              <li>Atiende fallos de L1I y L1D antes de acudir a la RAM física.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="demo-cue">
+          <div class="demo-cue-icon">⚡</div>
+          <div style="flex: 1;">
+            <div style="font-weight: 700; color: #fff; font-size: 1.05rem;">Paso a Demostración en Vivo — Karen</div>
+            <div style="font-size: 0.9rem; color: var(--clr-muted);">
+              Ir a la hoja <strong>Memory</strong>: cambiar entre FIFO y LRU, correr el <strong>Programa 3</strong> observando los Page Faults en rojo y modificar un byte en la grilla de RAM para demostrar la invalidación de líneas.
+            </div>
+          </div>
+          <div class="brand-chip" style="font-size: 0.9rem; padding: 0.4rem 0.8rem;">Live Excel Demo</div>
+        </div>
+      </section>
+
+      <!-- SLIDE 9: MISAEL - ENTRADA/SALIDA -->
+      <section class="slide" data-speaker="Misael" data-block="3">
+        <div class="slide-header">
+          <div class="slide-kicker kicker-misael">Bloque 3 · Misael</div>
+          <h2 class="slide-title">Entrada/Salida: Teclado & Pantalla LCD 8x1</h2>
+          <p class="slide-subtitle">Periféricos mapeados en memoria (Página 15) gobernados por instrucciones IN / OUT y buffers tri-estado.</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">Teclado en RAM & Cola Circular de 8 Bytes</div>
+            <p style="font-size: 0.85rem; margin-bottom: 0.6rem;">
+              Implementado en memoria física (<span style="font-family: var(--font-mono); color: var(--clr-load);">0xF0..0xF7</span>) con punteros <span style="font-family: var(--font-mono);">KBD_HEAD (0xE0)</span>, <span style="font-family: var(--font-mono);">KBD_TAIL (0xE1)</span> y contador <span style="font-family: var(--font-mono); color: var(--clr-active);">KBD_COUNT (0xE3)</span>.
+            </p>
+            <div style="background: var(--clr-surface-alt); padding: 0.75rem; border-radius: 8px; font-size: 0.85rem; margin-bottom: 0.75rem;">
+              <strong style="color: var(--clr-active);">¿Por qué KBD_COUNT?</strong>
+              <p style="margin-top: 0.2rem;">En una cola circular clásica, solo con HEAD y TAIL se pierde 1 celda para distinguir "vacío" de "lleno" (capacidad 7). Con el contador se usan los <strong>8 bytes completos</strong>.</p>
+            </div>
+            <div style="font-size: 0.85rem; color: var(--clr-muted);">
+              Al intentar escribir con 8 teclas encoladas, el teclado emite alerta visual y mensaje "Buffer full - key ignored" sin sobreescribir datos.
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Pantalla LCD 8x1 & Video Buffer</div>
+            <p style="font-size: 0.85rem; margin-bottom: 0.75rem;">
+              Display de 8 caracteres conectado directamente al video buffer en RAM (<span style="font-family: var(--font-mono); color: var(--clr-hit);">0xF8..0xFF</span>) con cursor en <span style="font-family: var(--font-mono);">LCD_CURSOR (0xE2)</span>.
+            </p>
+
+            <div style="text-align: center; margin: 1rem 0;">
+              <div class="lcd-display">BYTEBAKE</div>
+              <div style="font-size: 0.75rem; color: var(--clr-muted); margin-top: 0.4rem;">Display LCD 8x1 (Monospace verde #9BBC0F)</div>
+            </div>
+
+            <div style="background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: 6px; font-size: 0.85rem;">
+              <strong>Instrucciones I/O dedicadas:</strong>
+              <div style="font-family: var(--font-mono); margin-top: 0.3rem;">
+                • <span style="color: var(--clr-active);">IN AX, [KBD]</span> → IO_R + En_KBD + Ld_AX (Mem_R=0)<br>
+                • <span style="color: var(--clr-hit);">OUT [LCD], AX</span> → IO_W + En_AX + Ld_LCD (Mem_W=0)
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 10: MISAEL - SOFTWARE Y CATÁLOGO -->
+      <section class="slide" data-speaker="Misael" data-block="3">
+        <div class="slide-header">
+          <div class="slide-kicker kicker-misael">Software & Ensamblador · Criterio G5 (15 pts)</div>
+          <h2 class="slide-title">Ensamblador de Dos Pasadas & Catálogo de Programas</h2>
+          <p class="slide-subtitle">Validación sintáctica en vivo, cargador a memoria virtual (VMem) y los 3 programas del examen.</p>
+        </div>
+
+        <div class="grid-3">
+          <div class="card">
+            <div class="card-title" style="color: var(--clr-active);">Programa 1: Multiplicación</div>
+            <div style="font-family: var(--font-mono); font-size: 0.75rem; background: var(--clr-surface-alt); padding: 0.5rem; border-radius: 6px; flex: 1;">
+              MOV AX, 0<br>
+              MOV BX, 7<br>
+              MOV CX, 5<br>
+              mult: ADD AX, BX<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DEC CX<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;JNZ mult<br>
+              MOV DX, AX<br>
+              STORE [0x080], DX<br>
+              HLT
+            </div>
+            <div style="font-size: 0.75rem; color: var(--clr-muted); margin-top: 0.5rem;">7 × 5 por sumas sucesivas. Usa los 4 registros (AX, BX, CX, DX) y almacena 35 en memoria.</div>
+          </div>
+
+          <div class="card">
+            <div class="card-title" style="color: var(--clr-hit);">Programa 2: Eco Teclado → LCD</div>
+            <div style="font-family: var(--font-mono); font-size: 0.75rem; background: var(--clr-surface-alt); padding: 0.5rem; border-radius: 6px; flex: 1;">
+              MOV CX, 8<br>
+              read: IN AX, [KBD]<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CMP AX, 0<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;JZ read<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;OUT [LCD], AX<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DEC CX<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;JNZ read<br>
+              HLT
+            </div>
+            <div style="font-size: 0.75rem; color: var(--clr-muted); margin-top: 0.5rem;">Espera activa si la cola está vacía. Llena los 8 caracteres del LCD interactivo y se detiene.</div>
+          </div>
+
+          <div class="card">
+            <div class="card-title" style="color: var(--clr-miss);">Programa 3: Accesos Dispersos</div>
+            <div style="font-family: var(--font-mono); font-size: 0.75rem; background: var(--clr-surface-alt); padding: 0.5rem; border-radius: 6px; flex: 1;">
+              LOAD AX, [0x020] ; Pág 1<br>
+              LOAD BX, [0x060] ; Pág 3<br>
+              STORE [0x0A0], AX ; Pág 5 Dirty<br>
+              LOAD DX, [0x0E0] ; Pág 7<br>
+              STORE [0x120], DX ; Pág 9 Dirty<br>
+              ...<br>
+              JNZ again
+            </div>
+            <div style="font-size: 0.75rem; color: var(--clr-muted); margin-top: 0.5rem;">Accede a 9 páginas distintas sobre 7 marcos libres. Provoca reemplazos y escrituras dirty.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 11: MISAEL - METODOLOGÍA Y COMMITS -->
+      <section class="slide" data-speaker="Misael" data-block="3">
+        <div class="slide-header">
+          <div class="slide-kicker kicker-misael">Metodología de Ingeniería · Criterios I1, I2, G6</div>
+          <h2 class="slide-title">Gitflow, Tablero Kanban & Commits Equitativos</h2>
+          <p class="slide-subtitle">Trazabilidad profesional: una issue = una rama = un PR documentado con capturas y merge commit.</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">Distribución Equitativa de Trabajo</div>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                  <span>Adriana (CPU, Buses, Integración)</span>
+                  <span style="font-weight: bold; color: var(--clr-active);">70 commits · 11 tareas</span>
+                </div>
+                <div style="height: 8px; background: var(--clr-surface-alt); border-radius: 4px; overflow: hidden; margin-top: 0.2rem;">
+                  <div style="width: 39%; height: 100%; background: var(--clr-active);"></div>
+                </div>
+              </div>
+
+              <div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                  <span>Misael (E/S, Software, UI, Presentación)</span>
+                  <span style="font-weight: bold; color: var(--clr-hit);">68 commits · 11 tareas</span>
+                </div>
+                <div style="height: 8px; background: var(--clr-surface-alt); border-radius: 4px; overflow: hidden; margin-top: 0.2rem;">
+                  <div style="width: 38%; height: 100%; background: var(--clr-hit);"></div>
+                </div>
+              </div>
+
+              <div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                  <span>Karen (Memoria, MMU, Caché L1/L2)</span>
+                  <span style="font-weight: bold; color: var(--clr-load);">42 commits · 12 tareas</span>
+                </div>
+                <div style="height: 8px; background: var(--clr-surface-alt); border-radius: 4px; overflow: hidden; margin-top: 0.2rem;">
+                  <div style="width: 23%; height: 100%; background: var(--clr-load);"></div>
+                </div>
+              </div>
+            </div>
+
+            <div style="margin-top: 1.2rem; background: var(--clr-surface-alt); padding: 0.8rem; border-radius: 8px; font-size: 0.85rem;">
+              <strong>Convención de Commits:</strong> <span style="font-family: var(--font-mono); color: var(--clr-active);">tipo(modulo): descripción (#issue)</span><br>
+              Commits pequeños, atómicos y distribuidos a lo largo de las jornadas de trabajo.
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Flujo Gitflow & Kanban en GitHub</div>
+            <ul style="font-size: 0.88rem; display: flex; flex-direction: column; gap: 0.5rem;">
+              <li><strong>Ramas protegidas:</strong> Nadie hace commit directo a <span style="font-family: var(--font-mono);">main</span> ni a <span style="font-family: var(--font-mono);">develop</span>.</li>
+              <li><strong>Revisión rotativa obligatoria:</strong> Adriana es revisada por Karen; Karen por Misael; Misael por Adriana.</li>
+              <li><strong>Merge commit sin squash:</strong> Preserva intacta la historia y la autoría de cada integrante en el commit graph.</li>
+              <li><strong>Tablero Kanban:</strong> 5 columnas (<span style="font-family: var(--font-mono); font-size: 0.75rem;">Backlog → To Do → In Progress → In Review → Done</span>) movidas el mismo día del trabajo.</li>
+            </ul>
+
+            <div style="margin-top: 1rem; border-top: 1px solid var(--clr-border); padding-top: 0.75rem; font-size: 0.85rem; color: var(--clr-muted);">
+              ✅ Cada PR incluye descripción técnica, pasos de prueba en Excel y capturas de pantalla de evidencia.
+            </div>
+          </div>
+        </div>
+
+        <div class="demo-cue">
+          <div class="demo-cue-icon">⚡</div>
+          <div style="flex: 1;">
+            <div style="font-weight: 700; color: #fff; font-size: 1.05rem;">Paso a Demostración en Vivo — Misael</div>
+            <div style="font-size: 0.9rem; color: var(--clr-muted);">
+              Ir a la hoja <strong>Programs</strong> de Excel: cargar el <strong>Programa 2</strong>, teclear letras en el teclado interactivo y verlas salir en el display LCD. Mostrar luego el commit graph y el tablero en GitHub.
+            </div>
+          </div>
+          <div class="brand-chip" style="font-size: 0.9rem; padding: 0.4rem 0.8rem;">Live Excel Demo</div>
+        </div>
+      </section>
+
+      <!-- SLIDE 12: PREGUNTAS CLAVE DE LA DEFENSA -->
+      <section class="slide" data-speaker="Equipo" data-block="3">
+        <div class="slide-header">
+          <div class="slide-kicker" style="color: var(--clr-load);">Preparación de Sustentación · Criterio I4 (20 pts)</div>
+          <h2 class="slide-title">Preguntas Clave del Tribunal & Respuestas Técnicas</h2>
+          <p class="slide-subtitle">Respuestas precisas a las preguntas conceptuales y de arquitectura más comunes.</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="card" style="font-size: 0.85rem; gap: 0.75rem;">
+            <div>
+              <strong style="color: var(--clr-active);">1. ¿Por qué PC es de 9 bits y la RAM física es de 8 bits?</strong>
+              <p style="color: var(--clr-text); margin-top: 0.2rem;">Porque PC opera en el espacio virtual (512 B, 9 bits). La RAM es de 256 B (8 bits). La MMU está situada entre ambos buses y traduce la dirección antes de tocar la memoria física.</p>
+            </div>
+            <div>
+              <strong style="color: var(--clr-load);">2. ¿Por qué la Página 15 (E/S) no se puede cachear?</strong>
+              <p style="color: var(--clr-text); margin-top: 0.2rem;">Porque contiene los buffers de periféricos vivos (teclado y LCD). Si se cacheara, una lectura devolvería datos obsoletos y la pantalla LCD nunca se refrescaría en tiempo real.</p>
+            </div>
+            <div>
+              <strong style="color: var(--clr-hit);">3. ¿Por qué se utilizó Write-Through en lugar de Write-Back en L1D?</strong>
+              <p style="color: var(--clr-text); margin-top: 0.2rem;">Porque garantiza que la RAM esté permanentemente sincronizada con la caché, simplificando la coherencia frente al desalojo de marcos de memoria virtual y facilitando la visualización en la grilla.</p>
+            </div>
+          </div>
+
+          <div class="card" style="font-size: 0.85rem; gap: 0.75rem;">
+            <div>
+              <strong style="color: var(--clr-miss);">4. ¿Por qué ocurre la anomalía de Belady en FIFO y no en LRU?</strong>
+              <p style="color: var(--clr-text); margin-top: 0.2rem;">Porque FIFO no es un algoritmo de pila: el conjunto de páginas con <i>n</i> marcos no es necesariamente un subconjunto de <i>n+1</i> marcos. LRU mantiene la propiedad de inclusión y es estrictamente monótono.</p>
+            </div>
+            <div>
+              <strong style="color: var(--clr-active);">5. ¿Qué pasa si dos buffers encienden su señal En_* a la vez?</strong>
+              <p style="color: var(--clr-text); margin-top: 0.2rem;">Se produce un cortocircuito eléctrico (Bus Collision). En el simulador, el validador de palabra de control detecta dos conductores activos, aborta el paso y resalta los dos emisores en rojo.</p>
+            </div>
+            <div>
+              <strong style="color: var(--clr-load);">6. ¿Cómo se asegura que la instrucción se reanuda tras un Page Fault?</strong>
+              <p style="color: var(--clr-text); margin-top: 0.2rem;">El micro-paso que sufrió el fallo detiene la ejecución, llama a <code>HandlePageFault</code>, y una vez que la página está cargada con Present=1, vuelve a invocar la lectura física sin avanzar el micro-paso.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 13: CONCLUSIÓN Y ENLACES -->
+      <section class="slide" data-speaker="Equipo" data-block="3">
+        <div style="text-align: center; margin: auto; max-width: 800px;">
+          <h2 style="font-size: 2.5rem; font-weight: 900; margin-bottom: 1rem; color: #fff;">
+            ¡Gracias por su atención!
+          </h2>
+          <p style="color: var(--clr-muted); font-size: 1.1rem; margin-bottom: 2rem;">
+            Byte Bakers Simulator · Versión 1.0.0 · Universidad Católica Boliviana "San Pablo"
+          </p>
+
+          <div class="grid-3" style="text-align: left; margin-bottom: 2rem;">
+            <div class="card" style="border-top: 4px solid var(--clr-active);">
+              <div style="font-weight: bold; color: var(--clr-active); margin-bottom: 0.3rem;">Repositorio</div>
+              <div style="font-family: var(--font-mono); font-size: 0.8rem; word-break: break-all;">
+                github.com/Adriana-HS/byte-bakers-simulator
+              </div>
+            </div>
+            <div class="card" style="border-top: 4px solid var(--clr-load);">
+              <div style="font-weight: bold; color: var(--clr-load); margin-bottom: 0.3rem;">Tablero Kanban</div>
+              <div style="font-family: var(--font-mono); font-size: 0.8rem; word-break: break-all;">
+                GitHub Projects #4 (Byte Bakers)
+              </div>
+            </div>
+            <div class="card" style="border-top: 4px solid var(--clr-hit);">
+              <div style="font-weight: bold; color: var(--clr-hit); margin-bottom: 0.3rem;">Libro Excel</div>
+              <div style="font-family: var(--font-mono); font-size: 0.8rem; word-break: break-all;">
+                excel/ByteBakers.xlsm (v1.0.0)
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: center; gap: 1rem;">
+            <button class="btn-icon" style="background: var(--clr-active); border-color: var(--clr-active); font-weight: bold; padding: 0.6rem 1.5rem;" onclick="window.print()">
+              🖨 Imprimir / Guardar a PDF
+            </button>
+            <button class="btn-icon" style="padding: 0.6rem 1.5rem;" onclick="goToSlide(0)">
+              ↺ Volver al Inicio
+            </button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- BOTTOM FOOTER / NAVIGATION CONTROLS -->
+  <footer>
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+      <button class="btn-icon" onclick="prevSlide()" title="Diapositiva Anterior (←)">‹ Anterior</button>
+      <button class="btn-icon" onclick="nextSlide()" title="Siguiente Diapositiva (→ / Espacio)">Siguiente ›</button>
+      <span id="slideCounter" style="font-family: var(--font-mono); font-size: 0.85rem; margin-left: 0.5rem; color: var(--clr-muted);">1 / 13</span>
+    </div>
+
+    <div class="progress-bar-container">
+      <div id="progressBar" class="progress-bar"></div>
+    </div>
+
+    <div class="keyboard-hint">
+      <span>Teclas:</span>
+      <span class="key-badge">←</span>
+      <span class="key-badge">→</span>
+      <span class="key-badge">Espacio</span>
+      <span class="key-badge">F</span> pantalla completa
+      <span class="key-badge">T</span> cronómetro
+    </div>
+  </footer>
+
+  <!-- INTERACTIVE CONTROLLER JAVASCRIPT -->
+  <script>
+    let currentSlide = 0;
+    const slides = document.querySelectorAll('.slide');
+    const totalSlides = slides.length;
+    const progressBar = document.getElementById('progressBar');
+    const slideCounter = document.getElementById('slideCounter');
+    const speakerPill = document.getElementById('speakerPill');
+    const speakerName = document.getElementById('speakerName');
+
+    // DEFENSE TIMER STATE (20 MINUTES = 1200 SECONDS)
+    let timerSeconds = 0;
+    let timerRunning = false;
+    let timerInterval = null;
+
+    function updateSlide() {
+      slides.forEach((s, idx) => {
+        s.classList.toggle('active', idx === currentSlide);
+      });
+
+      const activeSlide = slides[currentSlide];
+      const speaker = activeSlide.getAttribute('data-speaker') || 'Equipo';
+      
+      // Update Speaker Pill
+      speakerPill.className = 'speaker-pill ' + speaker.toLowerCase();
+      if (speaker === 'Adriana') speakerName.innerText = 'Adriana (CPU & Buses)';
+      else if (speaker === 'Karen') speakerName.innerText = 'Karen (Memoria & Caché)';
+      else if (speaker === 'Misael') speakerName.innerText = 'Misael (E/S & Software)';
+      else speakerName.innerText = 'Byte Bakers (Defensa Oral)';
+
+      // Update Counter and Progress Bar
+      slideCounter.innerText = `${currentSlide + 1} / ${totalSlides}`;
+      const progress = ((currentSlide + 1) / totalSlides) * 100;
+      progressBar.style.width = progress + '%';
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides - 1) {
+        currentSlide++;
+        updateSlide();
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 0) {
+        currentSlide--;
+        updateSlide();
+      }
+    }
+
+    function goToSlide(idx) {
+      if (idx >= 0 && idx < totalSlides) {
+        currentSlide = idx;
+        updateSlide();
+      }
+    }
+
+    // KEYBOARD NAVIGATION
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return; // Don't intercept inputs
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        nextSlide();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'Backspace') {
+        prevSlide();
+      } else if (e.key === 'Home') {
+        goToSlide(0);
+      } else if (e.key === 'End') {
+        goToSlide(totalSlides - 1);
+      } else if (e.key === 'f' || e.key === 'F') {
+        toggleFullScreen();
+      } else if (e.key === 't' || e.key === 'T') {
+        toggleTimer();
+      }
+    });
+
+    // FULLSCREEN
+    function toggleFullScreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
+      }
+    }
+
+    // TIMER
+    function toggleTimer() {
+      if (timerRunning) {
+        clearInterval(timerInterval);
+        timerRunning = false;
+      } else {
+        timerRunning = true;
+        timerInterval = setInterval(() => {
+          timerSeconds++;
+          renderTimer();
+        }, 1000);
+      }
+    }
+
+    function resetTimer() {
+      clearInterval(timerInterval);
+      timerRunning = false;
+      timerSeconds = 0;
+      renderTimer();
+    }
+
+    function renderTimer() {
+      const mins = Math.floor(timerSeconds / 60);
+      const secs = timerSeconds % 60;
+      const fmt = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      const el = document.getElementById('defenseTimer');
+      el.innerText = `${fmt} / 20:00`;
+
+      // Color cues for speaker transitions (0 to 6:40, 6:40 to 13:20, 13:20 to 20:00)
+      if (timerSeconds >= 1200) {
+        el.style.color = 'var(--clr-miss)'; // Time's up!
+      } else if (timerSeconds >= 800) {
+        el.style.color = 'var(--clr-hit)'; // Block 3: Misael
+      } else if (timerSeconds >= 400) {
+        el.style.color = 'var(--clr-load)'; // Block 2: Karen
+      } else {
+        el.style.color = 'var(--clr-active)'; // Block 1: Adriana
+      }
+    }
+
+    // INTERACTIVE CALCULATOR
+    function updateLiveTranslation() {
+      const input = document.getElementById('demoVAddr').value.trim();
+      let vaddr = NaN;
+      if (input.startsWith('0x') || input.startsWith('0X')) {
+        vaddr = parseInt(input.substring(2), 16);
+      } else {
+        vaddr = parseInt(input, 10);
+      }
+
+      const resEl = document.getElementById('demoCalcResult');
+      if (isNaN(vaddr) || vaddr < 0 || vaddr > 511) {
+        resEl.innerText = 'Dirección inválida (0x000..0x1FF)';
+        resEl.style.color = 'var(--clr-miss)';
+        return;
+      }
+
+      const vpn = Math.floor(vaddr / 32);
+      const offset = vaddr % 32;
+      // Fixed mapping demo: page 5 in frame 2, page 15 in frame 7
+      let pfn = (vpn === 15) ? 7 : (vpn % 7);
+      let paddr = pfn * 32 + offset;
+
+      resEl.innerText = `VPN: ${vpn}, Offset: ${offset} → paddr: 0x${paddr.toString(16).toUpperCase().padStart(2, '0')} (${paddr})`;
+      resEl.style.color = 'var(--clr-hit)';
+    }
+
+    // INITIALIZE
+    updateSlide();
+  </script>
+</body>
+</html>
