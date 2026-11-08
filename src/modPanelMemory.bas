@@ -17,6 +17,8 @@ Option Explicit
 ' Piece 6a: replacement policy selector (pol_fifo / pol_lru, row 40).
 ' Piece 6b: click on a page table row (A2:E17) -> its frame gets a thick
 ' outline and the translation strip shows that page (OnPageTableClick).
+' Piece 6c: HEX / BIN / DEC view of the bytes shown in the frames
+' (fmt_hex / fmt_bin / fmt_dec, row 42).
 ' =====================================================================
 
 Private Const PANEL_TOP_ROW As Long = 28
@@ -27,6 +29,15 @@ Private Const POL_FIFO_NAME As String = "pol_fifo"
 Private Const POL_LRU_NAME As String = "pol_lru"
 Private Const POL_W As Single = 120
 Private Const POL_H As Single = 24
+Private Const FMT_ROW As Long = 42
+Private Const FMT_HEX_NAME As String = "fmt_hex"
+Private Const FMT_BIN_NAME As String = "fmt_bin"
+Private Const FMT_DEC_NAME As String = "fmt_dec"
+Private Const FMT_W As Single = 76
+Private Const FMT_H As Single = 24
+Private Const FMT_HEX As Integer = 0
+Private Const FMT_BIN As Integer = 1
+Private Const FMT_DEC As Integer = 2
 Private Const TOKEN_NAME As String = "tok_swap"
 Private Const FILL_TOKEN_NAME As String = "tok_fill"
 Private Const TOKEN_W As Single = 36
@@ -49,6 +60,9 @@ Private hlVisible As Long
 Private hlWeight As Single
 Private hlColor As Long
 Private hlActive As Boolean
+
+' Piece 6c: number format of the bytes in the frames (FMT_HEX by default)
+Private viewFmt As Integer
 
 ' Draws (or redraws) the whole panel. Safe to call many times:
 ' UI_AddBox deletes a shape with the same name before creating it.
@@ -89,6 +103,9 @@ Public Sub BuildMemoryPanel()
 
     ' Replacement policy selector under the strip
     BuildPolicySelector ws, leftX
+
+    ' Number format selector under the policy selector
+    BuildFormatSelector ws, leftX
 End Sub
 
 ' A cache box plus its label chip underneath (lbl_<name>)
@@ -130,6 +147,67 @@ Public Sub SetPolicyLRU()
     ReplacePolicy = POLICY_LRU
     PaintPolicySelector ThisWorkbook.Worksheets(SH_MEM)
 End Sub
+
+' ---------- Piece 6c: HEX / BIN / DEC view ----------
+
+' Three buttons. The one that matches viewFmt is amber, the others grey.
+Private Sub BuildFormatSelector(ByVal ws As Worksheet, ByVal leftX As Single)
+    Dim t As Single, b As Shape
+    t = ws.Rows(FMT_ROW).Top
+    Set b = UI_AddBox(ws, FMT_HEX_NAME, leftX, t, FMT_W, FMT_H, "HEX")
+    b.OnAction = "SetViewHex"
+    Set b = UI_AddBox(ws, FMT_BIN_NAME, leftX + FMT_W + 8, t, FMT_W, FMT_H, "BIN")
+    b.OnAction = "SetViewBin"
+    Set b = UI_AddBox(ws, FMT_DEC_NAME, leftX + 2 * (FMT_W + 8), t, FMT_W, FMT_H, "DEC")
+    b.OnAction = "SetViewDec"
+    PaintFormatSelector ws
+End Sub
+
+Private Sub PaintFormatSelector(ByVal ws As Worksheet)
+    If Not HasShape(ws, FMT_HEX_NAME) Then Exit Sub
+    If Not HasShape(ws, FMT_BIN_NAME) Then Exit Sub
+    If Not HasShape(ws, FMT_DEC_NAME) Then Exit Sub
+    UI_SetFill FMT_HEX_NAME, IIf(viewFmt = FMT_HEX, CLR_LOAD, CLR_HIGHZ)
+    UI_SetFill FMT_BIN_NAME, IIf(viewFmt = FMT_BIN, CLR_LOAD, CLR_HIGHZ)
+    UI_SetFill FMT_DEC_NAME, IIf(viewFmt = FMT_DEC, CLR_LOAD, CLR_HIGHZ)
+End Sub
+
+' Button handlers (assigned with OnAction). Each one repaints the frames.
+Public Sub SetViewHex()
+    viewFmt = FMT_HEX
+    RefreshMemoryPanel
+End Sub
+
+Public Sub SetViewBin()
+    viewFmt = FMT_BIN
+    RefreshMemoryPanel
+End Sub
+
+Public Sub SetViewDec()
+    viewFmt = FMT_DEC
+    RefreshMemoryPanel
+End Sub
+
+' One byte as text in the current view: HEX "1A", BIN "00011010", DEC "26"
+Private Function FormatByte(ByVal v As Integer) As String
+    Select Case viewFmt
+        Case FMT_BIN
+            FormatByte = ToBin(v And BYTE_MAX, DATA_BITS)
+        Case FMT_DEC
+            FormatByte = CStr(v And BYTE_MAX)
+        Case Else
+            FormatByte = Right$("0" & Hex$(v And BYTE_MAX), 2)
+    End Select
+End Function
+
+' How many bytes fit in a frame for the current view (BIN and DEC are wider)
+Private Function BytesToShow() As Integer
+    If viewFmt = FMT_HEX Then
+        BytesToShow = PREVIEW_BYTES
+    Else
+        BytesToShow = 2
+    End If
+End Function
 
 ' ---------- Piece 6b: click on a page table row ----------
 
@@ -183,9 +261,10 @@ End Sub
 
 ' Repaints the panel from the current machine state:
 '  - frames 0..6: page that owns the frame (FrameOwner) + first bytes of RAM
+'    in the current view (HEX / BIN / DEC)
 '  - frame 7 keeps its fixed I/O text
 '  - cache boxes go back to grey and their HIT/MISS chips are cleared
-'  - the policy selector matches ReplacePolicy
+'  - the policy and format selectors match the current choices
 Public Sub RefreshMemoryPanel()
     Dim ws As Worksheet, i As Integer, k As Integer
     Dim owner As Integer, base As Integer, preview As String
@@ -203,9 +282,9 @@ Public Sub RefreshMemoryPanel()
             Else
                 base = i * PAGE_SIZE
                 preview = ""
-                For k = 0 To PREVIEW_BYTES - 1
+                For k = 0 To BytesToShow() - 1
                     If k > 0 Then preview = preview & " "
-                    preview = preview & Right$("0" & Hex$(RAM(base + k)), 2)
+                    preview = preview & FormatByte(RAM(base + k))
                 Next k
                 UI_SetText PFX_FRM & i, "F" & i & vbLf & "P" & owner & vbLf & preview
                 UI_SetFill PFX_FRM & i, CLR_LOAD
@@ -220,6 +299,7 @@ Public Sub RefreshMemoryPanel()
     Next i
 
     PaintPolicySelector ws
+    PaintFormatSelector ws
 End Sub
 
 ' One cache box back to grey, its label chip empty
@@ -420,6 +500,7 @@ Public Sub Test_BuildMemoryPanel()
     Next i
     If Not HasShape(ws, XLT_NAME) Then fails = fails + 1: Debug.Print "  FAIL  1: missing " & XLT_NAME
     If Not HasShape(ws, POL_FIFO_NAME) Or Not HasShape(ws, POL_LRU_NAME) Then fails = fails + 1: Debug.Print "  FAIL  1: missing policy selector"
+    If Not HasShape(ws, FMT_HEX_NAME) Or Not HasShape(ws, FMT_BIN_NAME) Or Not HasShape(ws, FMT_DEC_NAME) Then fails = fails + 1: Debug.Print "  FAIL  1: missing format selector"
 
     ' 2) Real traffic: the cache animation must paint the boxes
     InvalidateAllCaches
@@ -443,13 +524,16 @@ End Sub
 Public Sub Test_RefreshMemoryPanel()
     Dim fails As Integer, ws As Worksheet
     Dim oldOwner As Integer, oldB0 As Integer, oldB1 As Integer, oldB2 As Integer
+    Dim oldFmt As Integer
     Dim t As String
     Set ws = ThisWorkbook.Worksheets(SH_MEM)
     BuildMemoryPanel
 
-    ' Save the state this test changes
+    ' Save the state this test changes. The test needs the HEX view.
     oldOwner = FrameOwner(0)
     oldB0 = RAM(0): oldB1 = RAM(1): oldB2 = RAM(2)
+    oldFmt = viewFmt
+    viewFmt = FMT_HEX
 
     ' 1) Frame 0 owned by page 3 with known bytes
     FrameOwner(0) = 3
@@ -485,6 +569,7 @@ Public Sub Test_RefreshMemoryPanel()
     ' Cleanup: restore the state and leave the panel as the machine has it
     FrameOwner(0) = oldOwner
     RAM(0) = oldB0: RAM(1) = oldB1: RAM(2) = oldB2
+    viewFmt = oldFmt
     RefreshMemoryPanel
 
     Debug.Print IIf(fails = 0, "Test_RefreshMemoryPanel: ALL OK", "Test_RefreshMemoryPanel: " & fails & " FAIL(S)")
@@ -702,3 +787,61 @@ Public Sub Test_PageTableClick()
     Debug.Print IIf(fails = 0, "Test_PageTableClick: ALL OK", "Test_PageTableClick: " & fails & " FAIL(S)")
 End Sub
 
+Public Sub Test_ViewFormat()
+    Dim fails As Integer, ws As Worksheet, t As String
+    Dim oldOwner As Integer, oldB0 As Integer, oldB1 As Integer, oldB2 As Integer
+    Dim oldFmt As Integer
+    Set ws = ThisWorkbook.Worksheets(SH_MEM)
+    BuildMemoryPanel
+
+    ' Save the state this test changes
+    oldOwner = FrameOwner(0)
+    oldB0 = RAM(0): oldB1 = RAM(1): oldB2 = RAM(2)
+    oldFmt = viewFmt
+
+    ' Frame 0 owned by page 3 with known bytes: 0x1A = 26 = 00011010, 0xFF = 255
+    FrameOwner(0) = 3
+    RAM(0) = &H1A: RAM(1) = &HFF: RAM(2) = &H5
+
+    ' 1) Buttons exist and call the right macros
+    If Not HasShape(ws, FMT_HEX_NAME) Or Not HasShape(ws, FMT_BIN_NAME) Or Not HasShape(ws, FMT_DEC_NAME) Then
+        fails = fails + 1: Debug.Print "  FAIL  1: missing format buttons"
+    Else
+        If InStr(ws.Shapes(FMT_HEX_NAME).OnAction, "SetViewHex") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: fmt_hex must call SetViewHex"
+        If InStr(ws.Shapes(FMT_BIN_NAME).OnAction, "SetViewBin") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: fmt_bin must call SetViewBin"
+        If InStr(ws.Shapes(FMT_DEC_NAME).OnAction, "SetViewDec") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: fmt_dec must call SetViewDec"
+    End If
+
+    ' 2) HEX: three bytes
+    SetViewHex
+    t = ws.Shapes(PFX_FRM & "0").TextFrame2.TextRange.Text
+    If InStr(t, "1A FF 05") = 0 Then fails = fails + 1: Debug.Print "  FAIL  2: HEX must show 1A FF 05, got: " & Replace(t, vbLf, "/")
+    If ws.Shapes(FMT_HEX_NAME).fill.ForeColor.RGB <> CLR_LOAD Then fails = fails + 1: Debug.Print "  FAIL  2: fmt_hex must be amber"
+    If ws.Shapes(FMT_BIN_NAME).fill.ForeColor.RGB <> CLR_HIGHZ Then fails = fails + 1: Debug.Print "  FAIL  2: fmt_bin must be grey"
+
+    ' 3) BIN: two bytes, 8 bits each
+    SetViewBin
+    t = ws.Shapes(PFX_FRM & "0").TextFrame2.TextRange.Text
+    If InStr(t, "00011010 11111111") = 0 Then fails = fails + 1: Debug.Print "  FAIL  3: BIN must show 00011010 11111111, got: " & Replace(t, vbLf, "/")
+    If ws.Shapes(FMT_BIN_NAME).fill.ForeColor.RGB <> CLR_LOAD Then fails = fails + 1: Debug.Print "  FAIL  3: fmt_bin must be amber"
+    If ws.Shapes(FMT_HEX_NAME).fill.ForeColor.RGB <> CLR_HIGHZ Then fails = fails + 1: Debug.Print "  FAIL  3: fmt_hex must be grey"
+
+    ' 4) DEC: two bytes
+    SetViewDec
+    t = ws.Shapes(PFX_FRM & "0").TextFrame2.TextRange.Text
+    If InStr(t, "26 255") = 0 Then fails = fails + 1: Debug.Print "  FAIL  4: DEC must show 26 255, got: " & Replace(t, vbLf, "/")
+    If ws.Shapes(FMT_DEC_NAME).fill.ForeColor.RGB <> CLR_LOAD Then fails = fails + 1: Debug.Print "  FAIL  4: fmt_dec must be amber"
+
+    ' 5) Frame 7 (I/O) keeps its text in every view
+    t = ws.Shapes(PFX_FRM & IO_FRAME).TextFrame2.TextRange.Text
+    If InStr(t, "I/O") = 0 Then fails = fails + 1: Debug.Print "  FAIL  5: frm_7 must keep I/O text"
+
+    ' Cleanup: restore the state and the view, and redraw the panel
+    FrameOwner(0) = oldOwner
+    RAM(0) = oldB0: RAM(1) = oldB1: RAM(2) = oldB2
+    viewFmt = oldFmt
+    BuildMemoryPanel
+    RefreshMemoryPanel
+
+    Debug.Print IIf(fails = 0, "Test_ViewFormat: ALL OK", "Test_ViewFormat: " & fails & " FAIL(S)")
+End Sub
