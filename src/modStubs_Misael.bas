@@ -10,16 +10,7 @@ Attribute VB_Name = "modStubs_Misael"
 ' =====================================================================
 Option Explicit
 
-' ---------------------------------------------------------------------
-' TEMP compile bridges for M3 until A8 / A9 / K10 publish their stubs.
-' Must stay ABOVE all Subs (VBA forbids module vars after procedures).
-' When those modules land, DELETE these lines (same pattern as the old
-' UI_Highlight stub that lived here until M2).
-' ---------------------------------------------------------------------
-Public MicroStep As Integer   ' A8
-Public RunFlag As Boolean     ' A8
-
-' --- modLCD (#29 / M6) — BuildIOPanel + RefreshKeyboard live in modKeyboard (#28) ---
+' --- modLCD (#29 / M6). BuildIOPanel + RefreshKeyboard live in modKeyboard (#28). ---
 Public Sub RefreshLCD()
 End Sub
 
@@ -31,15 +22,8 @@ End Function
 Public Sub IoWrite(ByVal v As Integer)
 End Sub
 
-' --- A8 / K10 bridges (A9 BuildCPUPanel/RefreshCPUPanel → modPanelCPU) ---
-Public Sub StepMicro()
-    If MicroStep < 1 Then MicroStep = 1 Else MicroStep = MicroStep + 1
-End Sub
-
-Public Sub RunProgram()
-    RunFlag = True
-End Sub
-
+' --- K10. A8 StepMicro/RunProgram/MicroStep live in modControlUnit. ---
+' --- A9 BuildCPUPanel/RefreshCPUPanel live in modPanelCPU. ---
 Public Sub BuildMiniMemory(ByVal ws As Worksheet)
 End Sub
 ' RefreshMemoryPanel / RefreshStats already exist in modStubs_Karen.
