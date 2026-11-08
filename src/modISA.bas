@@ -398,7 +398,7 @@ Public Sub BuildISASheet()
     ws.Cells.Clear
     ws.Cells.Font.Name = "Consolas"
     ws.Cells.Font.Size = 10
-    ws.Columns("B:J").NumberFormat = "@"      ' keep "00101" and "0x05" as text
+    ws.Columns("B:N").NumberFormat = "@"      ' keep "00101" and "0x05" as text
 
     ' Title
     With ws.Range("B2")
@@ -419,8 +419,8 @@ Public Sub BuildISASheet()
 
     ' Instruction table
     IsaHeader ws.Range("B" & ISA_HEADER_ROW).Resize(1, ISA_COLS), _
-        Array("Opcode", "Binary", "Mnemonic", "Syntax", "Format", "Flags", "Description", "Example", "Machine code", _
-              "Family", "Micro-steps", "Signals", "Cycles")
+        Array("Opcode", "Mnemonic", "Family", "Cycles", "Syntax", "Micro-steps", "Signals", _
+              "Format", "Flags", "Description", "Example", "Machine code", "Binary")
     r = ISA_HEADER_ROW
     For op = 0 To OPCODE_MAX
         If IsValidOpcode(op) Then
@@ -429,19 +429,23 @@ Public Sub BuildISASheet()
             ISA_Detail op, fam, st, sg, cy
             ws.Cells(r, 2).Resize(1, ISA_COLS).Value = Array( _
                 "0x" & Right$("0" & Hex$(op), 2), _
-                Right$("0000" & IsaBin(op), 5), _
                 Mnemonic(op), _
+                fam, _
+                cy, _
                 OpSyntax(op), _
+                st, _
+                sg, _
                 IIf(OpFormat(op) = "", "none", OpFormat(op)), _
                 OpFlags(op), _
                 OpDescription(op), _
                 Disassemble(ir), _
                 "0x" & Right$("000" & Hex$(ir), 4), _
-                fam, st, sg, cy)
-            ws.Cells(r, 11).Interior.Color = ISA_FamilyColor(fam)
-            If fam = "Control" Then ws.Cells(r, 11).Font.Color = CLR_TEXT
-            ws.Cells(r, 12).WrapText = True
-            ws.Cells(r, 13).WrapText = True
+                Right$("0000" & IsaBin(op), 5))
+            ws.Cells(r, 4).Interior.Color = ISA_FamilyColor(fam)
+            If fam = "Control" Then ws.Cells(r, 4).Font.Color = CLR_TEXT
+            ws.Cells(r, 6).WrapText = True
+            ws.Cells(r, 7).WrapText = True
+            ws.Rows(r).RowHeight = 32
         End If
     Next op
     lastRow = r
@@ -453,22 +457,30 @@ Public Sub BuildISASheet()
     ws.Cells(r, 2).Font.Bold = True
     ws.Cells(r + 1, 2).Value = "R = register   RR = reg, reg   RI = reg, immediate   RM = reg, [address]   MR = [address], reg"
     ws.Cells(r + 2, 2).Value = "A = address   RK = reg, [KBD]   LR = [LCD], reg   Flags: Z = ZF, C = CF, S = SF, - = unchanged"
-    r = r + 4
-    ws.Cells(r, 2).Value = "Signal colors (same as the simulator)"
-    ws.Cells(r, 2).Font.Bold = True
-    ws.Cells(r + 1, 2).Value = "En active"
-    ws.Cells(r + 1, 2).Interior.Color = CLR_ACTIVE
-    ws.Cells(r + 1, 2).Font.Color = CLR_TEXT
-    ws.Cells(r + 1, 3).Value = "Ld load"
-    ws.Cells(r + 1, 3).Interior.Color = CLR_LOAD
-    ws.Cells(r + 1, 4).Value = "High-Z"
-    ws.Cells(r + 1, 4).Interior.Color = CLR_HIGHZ
+    ws.Cells(r + 4, 2).Value = "Signal colors (same as the simulator)"
+    ws.Cells(r + 4, 2).Font.Bold = True
+    ws.Cells(r + 5, 2).Value = "En active"
+    ws.Cells(r + 5, 2).Interior.Color = CLR_ACTIVE
+    ws.Cells(r + 5, 2).Font.Color = CLR_TEXT
+    ws.Cells(r + 5, 3).Value = "Ld load"
+    ws.Cells(r + 5, 3).Interior.Color = CLR_LOAD
+    ws.Cells(r + 5, 4).Value = "High-Z"
+    ws.Cells(r + 5, 4).Interior.Color = CLR_HIGHZ
 
-    ws.Columns("A").ColumnWidth = 2
-    ws.Range("B6:N" & lastRow).Columns.AutoFit
-    ws.Columns("C").ColumnWidth = 16
-    ws.Columns("L").ColumnWidth = 42
-    ws.Columns("M").ColumnWidth = 42
+    ws.Columns("A").ColumnWidth = 3
+    ws.Columns("B").ColumnWidth = 9
+    ws.Columns("C").ColumnWidth = 12
+    ws.Columns("D").ColumnWidth = 13
+    ws.Columns("E").ColumnWidth = 9
+    ws.Columns("F").ColumnWidth = 18
+    ws.Columns("G").ColumnWidth = 36
+    ws.Columns("H").ColumnWidth = 36
+    ws.Columns("I").ColumnWidth = 8
+    ws.Columns("J").ColumnWidth = 10
+    ws.Columns("K").ColumnWidth = 28
+    ws.Columns("L").ColumnWidth = 16
+    ws.Columns("M").ColumnWidth = 12
+    ws.Columns("N").ColumnWidth = 8
     Application.ScreenUpdating = True
 
     ' A7: append 27-signal control word table + rules (no-op stub until modControlWord lands)
