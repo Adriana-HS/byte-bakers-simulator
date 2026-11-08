@@ -57,7 +57,6 @@ Public Sub BuildCPUPanel(ByVal ws As Worksheet)
     AddBox ws, "lbl_CPUTitle", PANEL_L, PANEL_T, 120, 18, "CPU / BUSES", CLR_CHIP
     AddBox ws, "lbl_Transfer", PANEL_L + 128, PANEL_T, 220, 18, "idle", CLR_CHIP
     AddBox ws, "phs_Now", PANEL_L + 356, PANEL_T, 78, 18, "FETCH", CLR_CHIP
-    AddBox ws, "lbl_Micro", 696, 32, 420, 16, "idle", CLR_CHIP
     BuildTimeline ws
 
     ' --- GP registers + buffers (left column) ---
@@ -309,7 +308,6 @@ Public Sub RefreshCPUPanel()
     Else
         UI_SetText "lbl_Transfer", "idle"
     End If
-    UI_SetText "lbl_Micro", CurrentMicroText()
 
     ' Control word lights
     For i = 0 To NUM_SIGNALS - 1
@@ -438,9 +436,9 @@ End Sub
 Private Sub BuildHistory(ByVal ws As Worksheet)
     Dim c As Integer
     Dim s As Shape
-    AddBox ws, "lbl_Hist", 500, 248, 140, 14, "LAST 8", CLR_CHIP
+    AddBox ws, "lbl_Hist", 500, 200, 150, 14, "LAST 8   bottom = IRd", CLR_CHIP
     For c = 1 To 8
-        Set s = UI_AddBox(ws, "hist_" & c, 500 + (c - 1) * 18, 264, 16, 72, ZeroBits(), CLR_CHIP)
+        Set s = UI_AddBox(ws, "hist_" & c, 500 + (c - 1) * 18, 216, 16, 118, ZeroBits(), CLR_CHIP)
         s.Line.Visible = msoTrue
         s.Line.ForeColor.RGB = CLR_BG
         s.Line.Weight = 1
