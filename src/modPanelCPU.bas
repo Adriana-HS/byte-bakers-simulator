@@ -259,10 +259,10 @@ Public Sub RefreshCPUPanel()
     Set wsIsa = ThisWorkbook.Worksheets(SH_ISA)
     If Not wsIsa Is Nothing Then
         If mPrevIsaRow > 0 And mPrevIsaRow <> row Then
-            wsIsa.Range(wsIsa.Cells(mPrevIsaRow, 2), wsIsa.Cells(mPrevIsaRow, 10)).Interior.ColorIndex = xlNone
+            wsIsa.Range(wsIsa.Cells(mPrevIsaRow, 2), wsIsa.Cells(mPrevIsaRow, ISA_TABLE_LAST_COL)).Interior.ColorIndex = xlNone
         End If
         If row > 0 Then
-            wsIsa.Range(wsIsa.Cells(row, 2), wsIsa.Cells(row, 10)).Interior.Color = CLR_ISA_HL
+            wsIsa.Range(wsIsa.Cells(row, 2), wsIsa.Cells(row, ISA_TABLE_LAST_COL)).Interior.Color = CLR_ISA_HL
             mPrevIsaRow = row
         End If
     End If
