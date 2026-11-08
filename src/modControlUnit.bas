@@ -95,6 +95,7 @@ Private Sub Emit(ByVal cw As Long, ByVal description As String)
     Bus.Clk = True
     lastDesc = description
     LogStep cw, description
+    AnimateControlWord cw, description, description
     On Error Resume Next
     UI_SetText "lbl_Transfer", description
     On Error GoTo 0
