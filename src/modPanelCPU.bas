@@ -121,11 +121,11 @@ Public Sub BuildCPUPanel(ByVal ws As Worksheet)
     For i = 0 To NUM_SIGNALS - 1
         nm = SignalName(i)
         If Len(nm) > 0 Then
-            x = PANEL_L + 8 + (i Mod 14) * 38
-            Set s = AddKey(ws, PFX_SIG & nm, x, y + (i \ 14) * 14, 36, 12, ShortSig(nm))
+            x = PANEL_L + 8 + (i Mod 14) * 44
+            Set s = AddKey(ws, PFX_SIG & nm, x, y + (i \ 14) * 16, 32, 12, ShortSig(nm))
         End If
     Next i
-    AddKey ws, PFX_SIG & "CLK", PANEL_L + 8 + 13 * 38, y + 14, 36, 12, "CLK"
+    AddKey ws, PFX_SIG & "CLK", PANEL_L + 8 + 13 * 44, y + 16, 32, 12, "CLK"
 
     RefreshCPUPanel
     Exit Sub
