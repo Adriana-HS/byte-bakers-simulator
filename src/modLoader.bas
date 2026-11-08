@@ -245,7 +245,7 @@ Public Function Test_Loader() As Long
         Len(CStr(ws.Cells(8, 2).Value)) > 0)
 
     OpenCatalog 1
-    fails = fails + LdCheck("editor got program 1", ws.Cells(ED_ROW, 2).Value = "MOV AX, 0")
+    fails = fails + LdCheck("editor got program 1", InStr(CStr(ws.Cells(ED_ROW, 2).Value), "MOV AX, 0") = 1)
 
     ws.Cells(ED_ROW, 2).Value = "NOPE AX, 1"
     VerifyEditor
@@ -272,6 +272,54 @@ Public Function Test_Loader() As Long
 
     Debug.Print IIf(fails = 0, "Test_Loader: ALL OK", "Test_Loader: " & fails & " FAIL(S)")
     Test_Loader = fails
+End Function
+
+' Read a catalog .asm next to the workbook (excel\..\programs) and assemble it.
+Public Function Test_Programs() As Long
+    Dim fails As Long
+    fails = fails + ProgFile("program1_multiply.asm", 18)
+    fails = fails + ProgFile("program2_keyboard_echo.asm", 16)
+    Debug.Print IIf(fails = 0, "Test_Programs: ALL OK", "Test_Programs: " & fails & " FAIL(S)")
+    Test_Programs = fails
+End Function
+
+Private Function ProgFile(ByVal fileName As String, ByVal expectBytes As Long) As Long
+    Dim path As String
+    Dim f As Integer
+    Dim ln As String
+    Dim src() As String
+    Dim n As Long
+    Dim code As Variant
+    Dim nBytes As Long
+    path = ThisWorkbook.Path & "\..\programs\" & fileName
+    If Dir$(path) = "" Then
+        Debug.Print "  FAIL  missing " & fileName
+        ProgFile = 1
+        Exit Function
+    End If
+    f = FreeFile
+    Open path For Input As #f
+    Do While Not EOF(f)
+        Line Input #f, ln
+        ReDim Preserve src(0 To n)
+        src(n) = ln
+        n = n + 1
+    Loop
+    Close #f
+    code = Assemble(src)
+    If AsmErrors Is Nothing Or AsmErrors.Count > 0 Then
+        Debug.Print "  FAIL  " & fileName & " did not assemble"
+        ProgFile = 1
+        Exit Function
+    End If
+    nBytes = UBound(code) - LBound(code) + 1
+    If nBytes <> expectBytes Then
+        Debug.Print "  FAIL  " & fileName & " expected " & expectBytes & " bytes, got " & nBytes
+        ProgFile = 1
+        Exit Function
+    End If
+    Debug.Print "  OK    " & fileName & " " & nBytes & " bytes"
+    ProgFile = 0
 End Function
 
 Private Sub DemandPaging()
@@ -392,13 +440,25 @@ Private Function CatalogLines(ByVal index As Integer) As Variant
     Select Case index
         Case 1
             CatalogLines = Array( _
-                "MOV AX, 0", "MOV BX, 7", "MOV CX, 5", _
-                "mult: ADD AX, BX", "DEC CX", "JNZ mult", _
-                "MOV DX, AX", "STORE [0x080], DX", "HLT")
+                "MOV AX, 0          ; accumulator starts at 0", _
+                "MOV BX, 7          ; multiplicand", _
+                "MOV CX, 5          ; add BX this many times", _
+                "mult: ADD AX, BX   ; AX = AX + 7", _
+                "DEC CX             ; one pass done", _
+                "JNZ mult           ; repeat while CX is not 0", _
+                "MOV DX, AX         ; DX holds 35", _
+                "STORE [0x080], DX  ; keep the result at 0x080", _
+                "HLT                ; stop")
         Case 2
             CatalogLines = Array( _
-                "MOV CX, 8", "read: IN AX, [KBD]", "CMP AX, 0", _
-                "JZ read", "OUT [LCD], AX", "DEC CX", "JNZ read", "HLT")
+                "MOV CX, 8          ; eight LCD positions", _
+                "read: IN AX, [KBD] ; take the next key", _
+                "CMP AX, 0          ; is the queue empty?", _
+                "JZ read            ; yes: wait for a key", _
+                "OUT [LCD], AX      ; show the character", _
+                "DEC CX             ; one position filled", _
+                "JNZ read           ; repeat until CX is 0", _
+                "HLT                ; stop")
         Case 3
             CatalogLines = Array( _
                 "MOV CX, 3", "pass: LOAD AX, [0x020]", "LOAD BX, [0x060]", _
