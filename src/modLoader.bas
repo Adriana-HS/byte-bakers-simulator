@@ -45,13 +45,14 @@ Public Sub BuildProgramsSheet()
     ws.Range("A11").Font.Color = CLR_TEXT
     ws.Range("A11").Interior.Color = CLR_BG
 
-    AddLoaderButton ws, "btn_Use1", 20, 150, "USE 1", "BtnUse1"
-    AddLoaderButton ws, "btn_Use2", 120, 150, "USE 2", "BtnUse2"
-    AddLoaderButton ws, "btn_Use3", 220, 150, "USE 3", "BtnUse3"
-    AddLoaderButton ws, "btn_LVerify", 340, 150, "VERIFY", "BtnVerify"
-    AddLoaderButton ws, "btn_LLoad", 440, 150, "LOAD", "BtnLoad"
-    AddLoaderButton ws, "btn_LSave", 540, 150, "SAVE", "BtnSave"
-    AddLoaderButton ws, "btn_LSaved", 640, 150, "SAVED", "BtnUseSaved"
+    ws.Rows(10).RowHeight = 32
+    AddLoaderButton ws, "btn_Use1", 20, ws.Rows(10).Top + 2, "USE 1", "BtnUse1"
+    AddLoaderButton ws, "btn_Use2", 120, ws.Rows(10).Top + 2, "USE 2", "BtnUse2"
+    AddLoaderButton ws, "btn_Use3", 220, ws.Rows(10).Top + 2, "USE 3", "BtnUse3"
+    AddLoaderButton ws, "btn_LVerify", 340, ws.Rows(10).Top + 2, "VERIFY", "BtnVerify"
+    AddLoaderButton ws, "btn_LLoad", 440, ws.Rows(10).Top + 2, "LOAD", "BtnLoad"
+    AddLoaderButton ws, "btn_LSave", 540, ws.Rows(10).Top + 2, "SAVE", "BtnSave"
+    AddLoaderButton ws, "btn_LSaved", 640, ws.Rows(10).Top + 2, "SAVED", "BtnUseSaved"
 
     OpenCatalog 1
     Application.ScreenUpdating = True
