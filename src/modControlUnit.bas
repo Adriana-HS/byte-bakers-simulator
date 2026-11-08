@@ -85,6 +85,25 @@ End Sub
 ' =====================================================================
 ' Emit - validate control word, publish on Bus, log + soft CW paint
 ' =====================================================================
+Public Function CurrentMicroText() As String
+    Dim n As Integer
+    If MicroStep >= 1 And MicroStep <= 6 Then
+        n = MicroStep
+        Select Case n
+            Case 1, 4: CurrentMicroText = "F" & n & "  PC -> MAR"
+            Case 2, 5: CurrentMicroText = "F" & n & "  M[MAR] -> MDR"
+            Case 3: CurrentMicroText = "F3  MDR -> IR, PC+1"
+            Case 6: CurrentMicroText = "F6  MDR -> IR, PC+1"
+        End Select
+    ElseIf MicroStep = 7 Then
+        CurrentMicroText = "DECODE"
+    ElseIf MicroStep > 7 Then
+        CurrentMicroText = "E" & (MicroStep - 7) & "  " & lastDesc
+    Else
+        CurrentMicroText = "idle"
+    End If
+End Function
+
 Private Sub Emit(ByVal cw As Long, ByVal description As String)
     Dim msg As String
     msg = ValidateControlWord(cw)
@@ -314,11 +333,36 @@ Private Sub ClearLogSheet()
         ws.Name = SH_LOG
     End If
     ws.Cells.Clear
-    ws.Range("A1:D1").Value = Array("CLK", "CTRL", "CW hex", "Transfer")
-    ws.Range("A1:D1").Font.Bold = True
+    ws.Range("A1:K1").Value = Array("CLK", "Phase", "PC", "AX", "BX", "CX", "DX", "Flags", "CTRL", "CW hex", "Transfer")
+    With ws.Range("A1:K1")
+        .Font.Name = "Segoe UI"
+        .Font.Bold = True
+        .Font.Color = CLR_TEXT
+        .Interior.Color = CLR_BG
+    End With
+    ws.Range("A2:K200").Font.Name = "Consolas"
+    ws.Range("A2:K200").Font.Size = 10
+    ws.Columns("A:K").ColumnWidth = 12
+    ws.Columns("I").ColumnWidth = 28
+    ws.Columns("K").ColumnWidth = 22
+    ws.Rows(1).RowHeight = 20
     logRow = 2
     On Error GoTo 0
 End Sub
+
+Private Function PhaseName() As String
+    If MicroStep >= 1 And MicroStep <= 6 Then
+        PhaseName = "FETCH"
+    ElseIf MicroStep = 7 Then
+        PhaseName = "DECODE"
+    Else
+        PhaseName = "EXECUTE"
+    End If
+End Function
+
+Private Function FlagText() As String
+    FlagText = "Z" & IIf(CPU.ZF, "1", "0") & " C" & IIf(CPU.CF, "1", "0") & " S" & IIf(CPU.SF, "1", "0")
+End Function
 
 Private Sub LogStep(ByVal cw As Long, ByVal description As String)
     Dim ws As Worksheet
@@ -327,9 +371,19 @@ Private Sub LogStep(ByVal cw As Long, ByVal description As String)
     If ws Is Nothing Then ClearLogSheet: Set ws = ThisWorkbook.Worksheets(SH_LOG)
     If logRow < 2 Then logRow = 2
     ws.Cells(logRow, 1).Value = Clock
-    ws.Cells(logRow, 2).Value = CW_ToString(cw)
-    ws.Cells(logRow, 3).Value = "0x" & Hex$(cw)
-    ws.Cells(logRow, 4).Value = description
+    ws.Cells(logRow, 2).Value = PhaseName()
+    ws.Cells(logRow, 3).Value = CPU.PC
+    ws.Cells(logRow, 4).Value = CPU.R(R_AX)
+    ws.Cells(logRow, 5).Value = CPU.R(R_BX)
+    ws.Cells(logRow, 6).Value = CPU.R(R_CX)
+    ws.Cells(logRow, 7).Value = CPU.R(R_DX)
+    ws.Cells(logRow, 8).Value = FlagText()
+    ws.Cells(logRow, 9).Value = CW_ToString(cw)
+    ws.Cells(logRow, 10).Value = "0x" & Hex$(cw)
+    ws.Cells(logRow, 11).Value = description
+    If logRow Mod 2 = 0 Then ws.Range(ws.Cells(logRow, 1), ws.Cells(logRow, 11)).Interior.Color = CLR_TEXT
+    ws.Range(ws.Cells(logRow, 1), ws.Cells(logRow, 11)).Borders.LineStyle = xlContinuous
+    ws.Range(ws.Cells(logRow, 1), ws.Cells(logRow, 11)).Borders.Color = CLR_HIGHZ
     logRow = logRow + 1
     On Error GoTo 0
 End Sub

@@ -486,17 +486,27 @@ Public Sub RefreshAll()
 End Sub
 
 Private Function StatusText() As String
-    Dim disasm As String
-    Dim irVal As Long
+    Dim detail As String
     On Error Resume Next
-    irVal = CPU.IR
-    disasm = Disassemble(irVal)
-    If Err.Number <> 0 Or Len(disasm) = 0 Then
+    detail = CurrentMicroText()
+    If Err.Number <> 0 Or Len(detail) = 0 Then
         Err.Clear
-        disasm = "IR " & Right$("0000" & Hex$(irVal And &HFFFF&), 4)
+        detail = "idle"
     End If
     On Error GoTo 0
-    StatusText = "CLK " & Clock & "  |  " & disasm & "  |  micro-step " & MicroStep
+    StatusText = PhaseWord() & "   " & detail & "    CLK " & Clock
+End Function
+
+Private Function PhaseWord() As String
+    If MicroStep >= 1 And MicroStep <= 6 Then
+        PhaseWord = "FETCH"
+    ElseIf MicroStep = 7 Then
+        PhaseWord = "DECODE"
+    ElseIf MicroStep > 7 Then
+        PhaseWord = "EXECUTE"
+    Else
+        PhaseWord = "IDLE"
+    End If
 End Function
 
 ' =====================================================================

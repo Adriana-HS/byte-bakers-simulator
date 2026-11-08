@@ -444,6 +444,9 @@ Public Sub BuildISASheet()
                 Disassemble(ir), _
                 "0x" & Right$("000" & Hex$(ir), 4), _
                 Right$("0000" & IsaBin(op), 5))
+            ws.Cells(r, 2).Resize(1, ISA_COLS).Interior.Color = CLR_TEXT
+            ws.Cells(r, 2).Resize(1, ISA_COLS).Font.Color = CLR_BG
+            ws.Cells(r, 2).Resize(1, ISA_COLS).Font.Name = "Consolas"
             ws.Cells(r, 4).Interior.Color = ISA_FamilyColor(fam)
             If fam = "Control" Then ws.Cells(r, 4).Font.Color = CLR_TEXT
             ws.Rows(r).RowHeight = 18
@@ -535,12 +538,13 @@ Private Sub IsaHeader(ByVal rng As Range, ByVal titles As Variant)
     rng.Font.Bold = True
     rng.Font.Color = CLR_TEXT
     rng.Interior.Color = CLR_BG
+    rng.RowHeight = 22
 End Sub
 
 Private Sub IsaBorders(ByVal rng As Range)
     With rng.Borders
         .LineStyle = xlContinuous
-        .Weight = xlThin
-        .Color = CLR_HIGHZ
+        .Weight = xlMedium
+        .Color = CLR_BG
     End With
 End Sub
