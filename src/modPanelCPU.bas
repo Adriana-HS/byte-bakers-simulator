@@ -84,10 +84,10 @@ Public Sub BuildCPUPanel(ByVal ws As Worksheet)
     y = PANEL_T + 44
     AddBox ws, "lbl_ALU", x, y, 100, 16, "ALU", CLR_CHIP
     y = y + 18
-    AddRegPair ws, "TA", x, y: y = y + 32
-    AddRegPair ws, "TB", x, y: y = y + 32
-    AddBox ws, PFX_BUF & "ALU", x + BOX_W + 4, y - 50, BUF_W, BUF_H, "Z", CLR_HIGHZ
+    AddRegPair ws, "TA", x, y: y = y + 36
+    AddRegPair ws, "TB", x, y: y = y + 36
     AddBox ws, PFX_REG & "ALU", x, y, BOX_W, BOX_H, "ALU", CLR_HIGHZ
+    AddBox ws, PFX_BUF & "ALU", x + BOX_W + 8, y + 5, BUF_W, BUF_H, "Z", CLR_HIGHZ
     y = y + 36
     AddBox ws, "flg_ZF", x, y, 40, 22, "ZF 0", CLR_HIGHZ
     AddBox ws, "flg_CF", x + 44, y, 40, 22, "CF 0", CLR_HIGHZ
