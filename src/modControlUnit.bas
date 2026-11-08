@@ -85,6 +85,25 @@ End Sub
 ' =====================================================================
 ' Emit - validate control word, publish on Bus, log + soft CW paint
 ' =====================================================================
+Public Function CurrentMicroText() As String
+    Dim n As Integer
+    If MicroStep >= 1 And MicroStep <= 6 Then
+        n = MicroStep
+        Select Case n
+            Case 1, 4: CurrentMicroText = "F" & n & "  PC -> MAR"
+            Case 2, 5: CurrentMicroText = "F" & n & "  M[MAR] -> MDR"
+            Case 3: CurrentMicroText = "F3  MDR -> IR, PC+1"
+            Case 6: CurrentMicroText = "F6  MDR -> IR, PC+1"
+        End Select
+    ElseIf MicroStep = 7 Then
+        CurrentMicroText = "DECODE"
+    ElseIf MicroStep > 7 Then
+        CurrentMicroText = "E" & (MicroStep - 7) & "  " & lastDesc
+    Else
+        CurrentMicroText = "idle"
+    End If
+End Function
+
 Private Sub Emit(ByVal cw As Long, ByVal description As String)
     Dim msg As String
     msg = ValidateControlWord(cw)
@@ -363,6 +382,8 @@ Private Sub LogStep(ByVal cw As Long, ByVal description As String)
     ws.Cells(logRow, 10).Value = "0x" & Hex$(cw)
     ws.Cells(logRow, 11).Value = description
     If logRow Mod 2 = 0 Then ws.Range(ws.Cells(logRow, 1), ws.Cells(logRow, 11)).Interior.Color = CLR_TEXT
+    ws.Range(ws.Cells(logRow, 1), ws.Cells(logRow, 11)).Borders.LineStyle = xlContinuous
+    ws.Range(ws.Cells(logRow, 1), ws.Cells(logRow, 11)).Borders.Color = CLR_HIGHZ
     logRow = logRow + 1
     On Error GoTo 0
 End Sub
