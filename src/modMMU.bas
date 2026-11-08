@@ -28,17 +28,27 @@ End Sub
 ' Dibuja la tabla VPN / P / PFN / D / R completa en la hoja Memory (A1:E17)
 Public Sub RefreshPageTableView()
     Dim ws As Worksheet, i As Integer
+    Dim hdr As Range
     Set ws = GetMemorySheet()
-    ws.Range("A1:E1").value = Array("VPN", "P", "PFN", "D", "R")
-    ws.Range("A1:E1").Font.Bold = True
+    Set hdr = ws.Range("A1:E1")
+    hdr.value = Array("VPN", "P", "PFN", "D", "R")
+    hdr.Font.Name = "Consolas"
+    hdr.Font.bold = True
+    hdr.Font.Color = CLR_TEXT
+    hdr.Interior.Color = CLR_BG
+    ApplyPageBorders hdr
     For i = 0 To NUM_VPAGES - 1
         RefreshPageTableRow i
     Next i
 End Sub
 
-' Redibuja solo la fila de una pagina (se llama en cada acceso)
+' Redibuja solo la fila de una pagina (se llama en cada acceso).
+' Present: type color (page 0 amber, pages 1-14 gray, page 15 LCD green).
+' Absent: cream fill and ink text. Column P stays 1 or 0.
 Public Sub RefreshPageTableRow(ByVal vpn As Integer)
     Dim ws As Worksheet, r As Long
+    Dim band As Range
+    Dim fill As Long
     Set ws = GetMemorySheet()
     r = vpn + 2
     ws.Cells(r, 1).value = vpn
@@ -46,11 +56,36 @@ Public Sub RefreshPageTableRow(ByVal vpn As Integer)
     ws.Cells(r, 3).value = IIf(PageTable(vpn).Present, CStr(PageTable(vpn).pfn), "-")
     ws.Cells(r, 4).value = IIf(PageTable(vpn).Dirty, 1, 0)
     ws.Cells(r, 5).value = IIf(PageTable(vpn).Ref, 1, 0)
+    Set band = ws.Range(ws.Cells(r, 1), ws.Cells(r, 5))
     If PageTable(vpn).Present Then
-        ws.Range(ws.Cells(r, 1), ws.Cells(r, 5)).Interior.Color = CLR_HIT
+        fill = PresentFill(vpn)
+        band.Interior.Color = fill
+        band.Font.Color = UI_InkFor(fill)
     Else
-        ws.Range(ws.Cells(r, 1), ws.Cells(r, 5)).Interior.Pattern = xlNone
+        band.Interior.Color = CLR_TEXT
+        band.Font.Color = CLR_INK
     End If
+    band.Font.Name = "Consolas"
+    ApplyPageBorders band
+End Sub
+
+' Present row fill by page type. Not used for an absent page.
+Private Function PresentFill(ByVal vpn As Integer) As Long
+    If vpn = 0 Then
+        PresentFill = CLR_LOAD
+    ElseIf vpn = IO_VPAGE Then
+        PresentFill = CLR_LCD
+    Else
+        PresentFill = CLR_HIGHZ
+    End If
+End Function
+
+Private Sub ApplyPageBorders(ByVal rng As Range)
+    With rng.Borders
+        .LineStyle = xlContinuous
+        .weight = xlThin
+        .Color = CLR_BORDER
+    End With
 End Sub
 
 Private Function GetMemorySheet() As Worksheet
