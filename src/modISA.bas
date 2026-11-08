@@ -45,7 +45,8 @@ Public Const NUM_INSTRUCTIONS As Integer = 24 ' opcodes in use
 
 ' ISA reference sheet layout (see BuildISASheet)
 Public Const ISA_HEADER_ROW As Long = 11      ' table header; instructions start below it
-Private Const ISA_COLS As Long = 9            ' columns B..J
+Public Const ISA_TABLE_LAST_COL As Long = 14  ' column N; the CPU panel highlights through here
+Private Const ISA_COLS As Long = 13           ' columns B..N
 
 ' =====================================================================
 ' Encode - packs one instruction into 16 bits.
@@ -160,6 +161,99 @@ Public Function OpDescription(ByVal op As Integer) As String
     OpDescription = ds
 End Function
 
+' Micro-steps, signals, cycle count and family. The sheet and the
+' defense read this, so the columns cannot drift from each other.
+' Fetch is the six steps modControlUnit always runs before execute.
+Public Sub ISA_Detail(ByVal op As Integer, ByRef family As String, ByRef steps As String, _
+                      ByRef sigs As String, ByRef cycles As Integer)
+    Dim ex As String, es As String, n As Integer
+    family = ""
+    steps = ""
+    sigs = ""
+    cycles = 0
+    If Not IsValidOpcode(op) Then Exit Sub
+    ExecDetail op, family, ex, es, n
+    ' Fetch F1-F6 is the same for every instruction, so the cell shows
+    ' only the execute steps. Cycles still counts the six fetch steps.
+    steps = ex
+    sigs = es
+    cycles = 6 + n
+End Sub
+
+Private Sub ExecDetail(ByVal op As Integer, ByRef family As String, ByRef steps As String, _
+                       ByRef sigs As String, ByRef n As Integer)
+    Select Case op
+        Case OP_NOP
+            family = "Control": n = 1
+            steps = "E1 NOP": sigs = "E1 (none)"
+        Case OP_HLT
+            family = "Control": n = 1
+            steps = "E1 HLT": sigs = "E1 (none)"
+        Case OP_MOV_RI
+            family = "Transfer": n = 1
+            steps = "E1 IR(imm)->r": sigs = "E1 En_IR_D Ld_r"
+        Case OP_MOV_RR
+            family = "Transfer": n = 1
+            steps = "E1 r2->r": sigs = "E1 En_r2 Ld_r"
+        Case OP_LOAD
+            family = "Transfer": n = 3
+            steps = "E1 IR(addr)->MAR | E2 M[MAR]->MDR | E3 MDR->r"
+            sigs = "E1 En_IR_A Ld_MAR | E2 Mem_R Ld_MDR | E3 En_MDR Ld_r"
+        Case OP_STORE
+            family = "Transfer": n = 3
+            steps = "E1 IR(addr)->MAR | E2 r->MDR | E3 MDR->M[MAR]"
+            sigs = "E1 En_IR_A Ld_MAR | E2 En_r Ld_MDR | E3 En_MDR Mem_W"
+        Case OP_ADD_RR, OP_SUB_RR, OP_AND, OP_OR, OP_XOR
+            family = IIf(op = OP_AND Or op = OP_OR Or op = OP_XOR, "Logic", "Arithmetic")
+            n = 3
+            steps = "E1 r->TA | E2 r2->TB | E3 ALU->r + flags"
+            sigs = "E1 En_r Ld_TA | E2 En_r2 Ld_TB | E3 En_ALU Ld_r Ld_FLAGS"
+        Case OP_ADD_RI, OP_SUB_RI
+            family = "Arithmetic": n = 3
+            steps = "E1 r->TA | E2 IR(imm)->TB | E3 ALU->r + flags"
+            sigs = "E1 En_r Ld_TA | E2 En_IR_D Ld_TB | E3 En_ALU Ld_r Ld_FLAGS"
+        Case OP_INC, OP_DEC
+            family = "Arithmetic": n = 2
+            steps = "E1 r->TA | E2 ALU->r + flags"
+            sigs = "E1 En_r Ld_TA | E2 En_ALU Ld_r Ld_FLAGS"
+        Case OP_CMP_RR
+            family = "Arithmetic": n = 3
+            steps = "E1 r->TA | E2 r2->TB | E3 ALU->FLAGS"
+            sigs = "E1 En_r Ld_TA | E2 En_r2 Ld_TB | E3 En_ALU Ld_FLAGS"
+        Case OP_CMP_RI
+            family = "Arithmetic": n = 3
+            steps = "E1 r->TA | E2 IR(imm)->TB | E3 ALU->FLAGS"
+            sigs = "E1 En_r Ld_TA | E2 En_IR_D Ld_TB | E3 En_ALU Ld_FLAGS"
+        Case OP_JMP
+            family = "Jump": n = 1
+            steps = "E1 IR(addr)->PC": sigs = "E1 En_IR_A Ld_PC"
+        Case OP_JZ, OP_JNZ, OP_JC, OP_JS
+            family = "Jump": n = 1
+            steps = "E1 IR(addr)->PC if taken, else no transfer"
+            sigs = "E1 En_IR_A Ld_PC (taken) or none"
+        Case OP_IN
+            family = "I/O": n = 1
+            steps = "E1 KBD->r": sigs = "E1 IO_R En_KBD Ld_r"
+        Case OP_OUT
+            family = "I/O": n = 1
+            steps = "E1 r->LCD": sigs = "E1 En_r IO_W Ld_LCD"
+        Case Else
+            family = "": n = 0: steps = "": sigs = ""
+    End Select
+End Sub
+
+Public Function ISA_FamilyColor(ByVal family As String) As Long
+    Select Case family
+        Case "Transfer": ISA_FamilyColor = CLR_HIGHZ
+        Case "Arithmetic": ISA_FamilyColor = CLR_LOAD
+        Case "Logic": ISA_FamilyColor = CLR_HIT
+        Case "Jump": ISA_FamilyColor = CLR_SOFT
+        Case "I/O": ISA_FamilyColor = CLR_LCD
+        Case "Control": ISA_FamilyColor = CLR_BG
+        Case Else: ISA_FamilyColor = CLR_HIGHZ
+    End Select
+End Function
+
 ' =====================================================================
 ' OpcodeInfo - used by the assembler (#27): mnemonic + operand format
 ' -> opcode. Example: OpcodeInfo("ADD", "RR") = &H05.
@@ -264,6 +358,24 @@ Public Sub Test_ISA()
     fails = fails + IsaCheck("Disassemble OUT [LCD], AX", Disassemble(Encode(OP_OUT, R_AX, 0)) = "OUT [LCD], AX")
     fails = fails + IsaCheck("Disassemble JNZ 0x010", Disassemble(Encode(OP_JNZ, 0, &H10)) = "JNZ 0x010")
 
+    Dim fam As String, st As String, sg As String, cy As Integer, nOps As Integer
+    ISA_Detail OP_LOAD, fam, st, sg, cy
+    fails = fails + IsaCheck("LOAD family and cycles", fam = "Transfer" And cy = 9 And InStr(st, "IR(addr)->MAR") > 0)
+    fails = fails + IsaCheck("LOAD signals", InStr(sg, "En_IR_A") > 0 And InStr(sg, "Mem_R") > 0 And InStr(sg, "Ld_MDR") > 0)
+    ISA_Detail OP_IN, fam, st, sg, cy
+    fails = fails + IsaCheck("IN is I/O", fam = "I/O" And cy = 7 And InStr(sg, "E1 IO_R En_KBD Ld_r") > 0)
+    ISA_Detail OP_ADD_RR, fam, st, sg, cy
+    fails = fails + IsaCheck("ADD uses TA TB and flags", fam = "Arithmetic" And cy = 9 And InStr(sg, "Ld_FLAGS") > 0)
+    nOps = 0
+    For op = 0 To OPCODE_MAX
+        If IsValidOpcode(op) Then
+            nOps = nOps + 1
+            ISA_Detail op, fam, st, sg, cy
+            If Len(st) = 0 Or Len(sg) = 0 Or cy < 7 Or Len(fam) = 0 Then fails = fails + 1
+        End If
+    Next op
+    fails = fails + IsaCheck("Every instruction has steps, signals, family and cycles", nOps = NUM_INSTRUCTIONS And fails >= 0)
+
     Debug.Print IIf(fails = 0, "Test_ISA: ALL OK", "Test_ISA: " & fails & " FAIL(S)")
 End Sub
 
@@ -281,13 +393,14 @@ End Function
 
 Public Sub BuildISASheet()
     Dim ws As Worksheet, op As Integer, r As Long, ir As Long, lastRow As Long
+    Dim fam As String, st As String, sg As String, cy As Integer
 
     Set ws = IsaSheet()
     Application.ScreenUpdating = False
     ws.Cells.Clear
     ws.Cells.Font.Name = "Consolas"
     ws.Cells.Font.Size = 10
-    ws.Columns("B:J").NumberFormat = "@"      ' keep "00101" and "0x05" as text
+    ws.Columns("B:N").NumberFormat = "@"      ' keep "00101" and "0x05" as text
 
     ' Title
     With ws.Range("B2")
@@ -296,6 +409,7 @@ Public Sub BuildISASheet()
         .Font.Bold = True
     End With
     ws.Range("B3").Value = NUM_INSTRUCTIONS & " instructions, fixed 2-byte format. Registers: AX=0, BX=1, CX=2, DX=3."
+    ws.Range("B4").Value = "Cycles include F1-F6 fetch (PC->MAR, M->MDR, MDR->IR, twice). The columns below are only the execute steps."
 
     ' Instruction format
     ws.Range("B5").Value = "Instruction format"
@@ -308,22 +422,31 @@ Public Sub BuildISASheet()
 
     ' Instruction table
     IsaHeader ws.Range("B" & ISA_HEADER_ROW).Resize(1, ISA_COLS), _
-        Array("Opcode", "Binary", "Mnemonic", "Syntax", "Format", "Flags", "Description", "Example", "Machine code")
+        Array("Opcode", "Mnemonic", "Family", "Cycles", "Syntax", "Micro-steps", "Signals", _
+              "Format", "Flags", "Description", "Example", "Machine code", "Binary")
     r = ISA_HEADER_ROW
     For op = 0 To OPCODE_MAX
         If IsValidOpcode(op) Then
             r = r + 1
             ir = Encode(op, R_AX, SampleOperand(OpFormat(op)))
+            ISA_Detail op, fam, st, sg, cy
             ws.Cells(r, 2).Resize(1, ISA_COLS).Value = Array( _
                 "0x" & Right$("0" & Hex$(op), 2), _
-                Right$("0000" & IsaBin(op), 5), _
                 Mnemonic(op), _
+                fam, _
+                cy, _
                 OpSyntax(op), _
+                st, _
+                sg, _
                 IIf(OpFormat(op) = "", "none", OpFormat(op)), _
                 OpFlags(op), _
                 OpDescription(op), _
                 Disassemble(ir), _
-                "0x" & Right$("000" & Hex$(ir), 4))
+                "0x" & Right$("000" & Hex$(ir), 4), _
+                Right$("0000" & IsaBin(op), 5))
+            ws.Cells(r, 4).Interior.Color = ISA_FamilyColor(fam)
+            If fam = "Control" Then ws.Cells(r, 4).Font.Color = CLR_TEXT
+            ws.Rows(r).RowHeight = 18
         End If
     Next op
     lastRow = r
@@ -335,10 +458,30 @@ Public Sub BuildISASheet()
     ws.Cells(r, 2).Font.Bold = True
     ws.Cells(r + 1, 2).Value = "R = register   RR = reg, reg   RI = reg, immediate   RM = reg, [address]   MR = [address], reg"
     ws.Cells(r + 2, 2).Value = "A = address   RK = reg, [KBD]   LR = [LCD], reg   Flags: Z = ZF, C = CF, S = SF, - = unchanged"
+    ws.Cells(r + 4, 2).Value = "Signal colors (same as the simulator)"
+    ws.Cells(r + 4, 2).Font.Bold = True
+    ws.Cells(r + 5, 2).Value = "En active"
+    ws.Cells(r + 5, 2).Interior.Color = CLR_ACTIVE
+    ws.Cells(r + 5, 2).Font.Color = CLR_TEXT
+    ws.Cells(r + 5, 3).Value = "Ld load"
+    ws.Cells(r + 5, 3).Interior.Color = CLR_LOAD
+    ws.Cells(r + 5, 4).Value = "High-Z"
+    ws.Cells(r + 5, 4).Interior.Color = CLR_HIGHZ
 
-    ws.Columns("A").ColumnWidth = 2
-    ws.Range("B6:J" & lastRow).Columns.AutoFit   ' fit to the tables, not to the title
-    ws.Columns("C").ColumnWidth = 16           ' the long format line in C8 overflows to the right
+    ws.Columns("A").ColumnWidth = 3
+    ws.Columns("B").ColumnWidth = 9
+    ws.Columns("C").ColumnWidth = 12
+    ws.Columns("D").ColumnWidth = 13
+    ws.Columns("E").ColumnWidth = 9
+    ws.Columns("F").ColumnWidth = 18
+    ws.Columns("G").ColumnWidth = 36
+    ws.Columns("H").ColumnWidth = 36
+    ws.Columns("I").ColumnWidth = 8
+    ws.Columns("J").ColumnWidth = 10
+    ws.Columns("K").ColumnWidth = 28
+    ws.Columns("L").ColumnWidth = 16
+    ws.Columns("M").ColumnWidth = 12
+    ws.Columns("N").ColumnWidth = 8
     Application.ScreenUpdating = True
 
     ' A7: append 27-signal control word table + rules (no-op stub until modControlWord lands)
