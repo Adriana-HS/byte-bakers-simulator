@@ -1,14 +1,4 @@
 Attribute VB_Name = "modStubs_Karen"
 Option Explicit
-' =====================================================================
-' modStubs_Karen - Empty signatures of my functions not implemented yet.
-' RULE: when a function is implemented, its stub is DELETED in the SAME
-' PR (otherwise VBA raises "Ambiguous name detected").
-' =====================================================================
-
-' --- modPanelMemory (K10) ---
-Public Sub ShowTranslation(ByVal vpn As Integer, ByVal offset As Integer): End Sub
-Public Sub UI_PageFaultFlash(ByVal vpn As Integer): End Sub
-Public Sub UI_AnimateSwapIn(ByVal vpn As Integer, ByVal pfn As Integer): End Sub
-Public Sub UI_AnimateLineFill(ByVal idx As Integer): End Sub
-Public Sub RefreshMemoryPanel(): End Sub
+' Stubs owned by Karen. Each one is deleted in the same PR that implements it.
+' (No stubs left: all of them are implemented.)

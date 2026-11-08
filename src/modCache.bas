@@ -29,17 +29,17 @@ Private Const SHP_L2 As String = "l2_line"   ' + index (0..3)
 ' ---------- K6: L1I ----------
 
 Public Function CacheReadL1I(ByVal paddr As Integer) As Integer
-    Dim tag As Integer
+    Dim Tag As Integer
     CheckPaddr paddr
-    tag = paddr \ LINE_SIZE
-    If L1I.Valid And L1I.tag = tag Then
+    Tag = paddr \ LINE_SIZE
+    If L1I.Valid And L1I.Tag = Tag Then
         Stats.L1IHit = Stats.L1IHit + 1
         FlashCache SHP_L1I, True
         ShowResultAt L1I_ROW, L1I, "HIT"
     Else
         Stats.L1IMiss = Stats.L1IMiss + 1
         FlashCache SHP_L1I, False
-        FillFromL2 L1I, tag
+        FillFromL2 L1I, Tag, SHP_L1I    ' K10: also tells which box receives the line
         ShowLineAt L1I_ROW, L1I, "MISS"
     End If
     L1I.LastUse = Clock
@@ -49,17 +49,17 @@ End Function
 ' ---------- K7: L1D ----------
 
 Public Function CacheReadL1D(ByVal paddr As Integer) As Integer
-    Dim tag As Integer
+    Dim Tag As Integer
     CheckPaddr paddr
-    tag = paddr \ LINE_SIZE
-    If L1D.Valid And L1D.tag = tag Then
+    Tag = paddr \ LINE_SIZE
+    If L1D.Valid And L1D.Tag = Tag Then
         Stats.L1DHit = Stats.L1DHit + 1
         FlashCache SHP_L1D, True
         ShowResultAt L1D_ROW, L1D, "HIT"
     Else
         Stats.L1DMiss = Stats.L1DMiss + 1
         FlashCache SHP_L1D, False
-        FillFromL2 L1D, tag
+        FillFromL2 L1D, Tag, SHP_L1D    ' K10: also tells which box receives the line
         ShowLineAt L1D_ROW, L1D, "MISS"
     End If
     L1D.LastUse = Clock
@@ -71,11 +71,11 @@ End Function
 '  - MISS: the line is NOT loaded.
 '  - Both cases count hit/miss in L1D, then L2 is handled, and RAM is ALWAYS written.
 Public Sub CacheWriteL1D(ByVal paddr As Integer, ByVal value As Integer)
-    Dim tag As Integer
+    Dim Tag As Integer
     CheckPaddr paddr
     value = value And BYTE_MAX
-    tag = paddr \ LINE_SIZE
-    If L1D.Valid And L1D.tag = tag Then
+    Tag = paddr \ LINE_SIZE
+    If L1D.Valid And L1D.Tag = Tag Then
         Stats.L1DHit = Stats.L1DHit + 1
         L1D.Data(paddr Mod LINE_SIZE) = value
         L1D.LastUse = Clock
@@ -95,9 +95,9 @@ End Sub
 ' Write-through to L2 (no-write-allocate): on a hit the L2 line is updated
 ' and its LastUse refreshed; on a miss nothing is loaded. Both are counted.
 Private Sub WriteThroughToL2(ByVal paddr As Integer, ByVal value As Integer)
-    Dim tag As Integer, idx As Integer
-    tag = paddr \ LINE_SIZE
-    idx = L2Find(tag)
+    Dim Tag As Integer, idx As Integer
+    Tag = paddr \ LINE_SIZE
+    idx = L2Find(Tag)
     If idx >= 0 Then
         Stats.L2Hit = Stats.L2Hit + 1
         L2(idx).Data(paddr Mod LINE_SIZE) = value
@@ -105,44 +105,45 @@ Private Sub WriteThroughToL2(ByVal paddr As Integer, ByVal value As Integer)
         FlashCache SHP_L2 & idx, True
         ShowL2Row idx, "HIT"
     Else
-        Stats.l2Miss = Stats.l2Miss + 1
+        Stats.L2Miss = Stats.L2Miss + 1
         ' no-write-allocate: nothing is loaded; no L2 line to animate
     End If
 End Sub
 
 ' Reading path: look in L2 first, go down to RAM only on an L2 miss.
-Private Sub FillFromL2(ByRef l1 As TCacheLine, ByVal tag As Integer)
+' l1Shape is the name of the L1 box that receives the line (for the animation).
+Private Sub FillFromL2(ByRef l1 As TCacheLine, ByVal Tag As Integer, ByVal l1Shape As String)
     Dim idx As Integer, i As Integer
-    idx = L2Find(tag)
+    idx = L2Find(Tag)
     If idx >= 0 Then
         Stats.L2Hit = Stats.L2Hit + 1
         FlashCache SHP_L2 & idx, True
         ShowL2Row idx, "HIT"
     Else
-        Stats.l2Miss = Stats.l2Miss + 1
+        Stats.L2Miss = Stats.L2Miss + 1
         idx = L2Victim()
         FlashCache SHP_L2 & idx, False        ' highlight the victim before replacing
         L2(idx).Valid = True
-        L2(idx).tag = tag
+        L2(idx).Tag = Tag
         For i = 0 To LINE_SIZE - 1
-            L2(idx).Data(i) = RAM(tag * LINE_SIZE + i)
+            L2(idx).Data(i) = RAM(Tag * LINE_SIZE + i)
         Next i
         ShowL2Row idx, "MISS"
     End If
     L2(idx).LastUse = Clock
     l1.Valid = True
-    l1.tag = tag
+    l1.Tag = Tag
     For i = 0 To LINE_SIZE - 1
         l1.Data(i) = L2(idx).Data(i)
     Next i
-    UI_AnimateLineFill idx
+    UI_AnimateLineFill idx, l1Shape       ' K10: line travels from L2 to the L1 box
 End Sub
 
 ' Index of the L2 line holding this tag, or -1
-Private Function L2Find(ByVal tag As Integer) As Integer
+Private Function L2Find(ByVal Tag As Integer) As Integer
     Dim i As Integer
     For i = 0 To L2_LINES - 1
-        If L2(i).Valid And L2(i).tag = tag Then
+        If L2(i).Valid And L2(i).Tag = Tag Then
             L2Find = i
             Exit Function
         End If
@@ -180,14 +181,14 @@ Public Sub InvalidateFrame(ByVal pfn As Integer)
     firstTag = pfn * PAGE_SIZE \ LINE_SIZE
     lastTag = firstTag + (PAGE_SIZE \ LINE_SIZE) - 1
     If L1I.Valid Then
-        If L1I.tag >= firstTag And L1I.tag <= lastTag Then L1I.Valid = False
+        If L1I.Tag >= firstTag And L1I.Tag <= lastTag Then L1I.Valid = False
     End If
     If L1D.Valid Then
-        If L1D.tag >= firstTag And L1D.tag <= lastTag Then L1D.Valid = False
+        If L1D.Tag >= firstTag And L1D.Tag <= lastTag Then L1D.Valid = False
     End If
     For i = 0 To L2_LINES - 1
         If L2(i).Valid Then
-            If L2(i).tag >= firstTag And L2(i).tag <= lastTag Then L2(i).Valid = False
+            If L2(i).Tag >= firstTag And L2(i).Tag <= lastTag Then L2(i).Valid = False
         End If
     Next i
 End Sub
@@ -236,7 +237,7 @@ Private Sub EnsureCacheTable(ByVal ws As Worksheet)
     With ws.Range(ws.Cells(CACHE_HDR_ROW, 1), ws.Cells(CACHE_HDR_ROW + 6, 11))
         .NumberFormat = "@"
         .Font.Name = "Consolas"
-        .Font.Size = 9
+        .Font.size = 9
         .HorizontalAlignment = xlCenter
     End With
     ws.Cells(CACHE_HDR_ROW, 1).value = "Cache"
@@ -245,7 +246,7 @@ Private Sub EnsureCacheTable(ByVal ws As Worksheet)
     For i = 0 To LINE_SIZE - 1
         ws.Cells(CACHE_HDR_ROW, 4 + i).value = "B" & i
     Next i
-    ws.Range(ws.Cells(CACHE_HDR_ROW, 1), ws.Cells(CACHE_HDR_ROW, 11)).Font.Bold = True
+    ws.Range(ws.Cells(CACHE_HDR_ROW, 1), ws.Cells(CACHE_HDR_ROW, 11)).Font.bold = True
 End Sub
 
 Private Function RowLabel(ByVal rowNum As Long) As String
@@ -267,7 +268,7 @@ Private Sub ShowLineAt(ByVal rowNum As Long, ByRef line As TCacheLine, ByVal res
     ws.Cells(rowNum, 1).value = RowLabel(rowNum)
     cellsRow(0, 0) = result
     If line.Valid Then
-        cellsRow(0, 1) = CStr(line.tag)
+        cellsRow(0, 1) = CStr(line.Tag)
         For i = 0 To LINE_SIZE - 1
             cellsRow(0, 2 + i) = Hex2(line.Data(i))
         Next i
@@ -349,7 +350,7 @@ Public Sub Test_CacheL1I()
     v = CacheReadL1I(0)
     If v <> 100 Then fails = fails + 1: Debug.Print "  FAIL  1: CacheReadL1I(0) = " & v & " (expected 100)"
     If Stats.L1IMiss <> 1 Or Stats.L1IHit <> 0 Then fails = fails + 1: Debug.Print "  FAIL  1: expected 1 miss and 0 hits"
-    If Not L1I.Valid Or L1I.tag <> 0 Then fails = fails + 1: Debug.Print "  FAIL  1: the line should be valid with tag 0"
+    If Not L1I.Valid Or L1I.Tag <> 0 Then fails = fails + 1: Debug.Print "  FAIL  1: the line should be valid with tag 0"
     If CStr(ws.Cells(L1I_ROW, 2).value) <> "MISS" Or CStr(ws.Cells(L1I_ROW, 3).value) <> "0" _
        Or CStr(ws.Cells(L1I_ROW, 4).value) <> "64" Or CStr(ws.Cells(L1I_ROW, 11).value) <> "6B" Then
         fails = fails + 1: Debug.Print "  FAIL  1: the sheet should show MISS, tag 0, bytes 64..6B"
@@ -367,7 +368,7 @@ Public Sub Test_CacheL1I()
     v = CacheReadL1I(8)
     If v <> 108 Then fails = fails + 1: Debug.Print "  FAIL  3: CacheReadL1I(8) = " & v & " (expected 108)"
     If Stats.L1IMiss <> 2 Then fails = fails + 1: Debug.Print "  FAIL  3: expected 2 misses"
-    If L1I.tag <> 1 Then fails = fails + 1: Debug.Print "  FAIL  3: the tag should be 1"
+    If L1I.Tag <> 1 Then fails = fails + 1: Debug.Print "  FAIL  3: the tag should be 1"
     ok = True
     For i = 0 To 7
         If L1I.Data(i) <> 108 + i Then ok = False
@@ -430,7 +431,7 @@ Public Sub Test_CacheL1D()
     v = CacheReadL1D(0)
     If v <> 100 Then fails = fails + 1: Debug.Print "  FAIL  1: CacheReadL1D(0) = " & v & " (expected 100)"
     If Stats.L1DMiss <> 1 Or Stats.L1DHit <> 0 Then fails = fails + 1: Debug.Print "  FAIL  1: expected 1 miss and 0 hits"
-    If Not L1D.Valid Or L1D.tag <> 0 Then fails = fails + 1: Debug.Print "  FAIL  1: the line should be valid with tag 0"
+    If Not L1D.Valid Or L1D.Tag <> 0 Then fails = fails + 1: Debug.Print "  FAIL  1: the line should be valid with tag 0"
     If CStr(ws.Cells(L1D_ROW, 1).value) <> "L1D" Or CStr(ws.Cells(L1D_ROW, 2).value) <> "MISS" _
        Or CStr(ws.Cells(L1D_ROW, 3).value) <> "0" Or CStr(ws.Cells(L1D_ROW, 4).value) <> "64" _
        Or CStr(ws.Cells(L1D_ROW, 11).value) <> "6B" Then
@@ -457,14 +458,14 @@ Public Sub Test_CacheL1D()
     ' 4) STORE miss: the line is NOT loaded in L1D, RAM is written
     CacheWriteL1D 20, 77
     If RAM(20) <> 77 Then fails = fails + 1: Debug.Print "  FAIL  4: write-through: RAM(20) should be 77"
-    If Not L1D.Valid Or L1D.tag <> 0 Then fails = fails + 1: Debug.Print "  FAIL  4: no-write-allocate: L1D must still hold line 0"
+    If Not L1D.Valid Or L1D.Tag <> 0 Then fails = fails + 1: Debug.Print "  FAIL  4: no-write-allocate: L1D must still hold line 0"
     If Stats.L1DMiss <> 2 Or Stats.L1DHit <> 9 Then fails = fails + 1: Debug.Print "  FAIL  4: a STORE miss must count as a miss (2 misses, 9 hits)"
     If CStr(ws.Cells(L1D_ROW, 2).value) <> "MISS" Or CStr(ws.Cells(L1D_ROW, 3).value) <> "0" Then fails = fails + 1: Debug.Print "  FAIL  4: the sheet should show MISS and keep tag 0"
 
     ' 5) LOAD after a STORE miss: MISS, returns the new value
     v = CacheReadL1D(20)
     If v <> 77 Then fails = fails + 1: Debug.Print "  FAIL  5: CacheReadL1D(20) = " & v & " (expected 77)"
-    If Stats.L1DMiss <> 3 Or L1D.tag <> 2 Then fails = fails + 1: Debug.Print "  FAIL  5: expected a MISS that loads tag 2"
+    If Stats.L1DMiss <> 3 Or L1D.Tag <> 2 Then fails = fails + 1: Debug.Print "  FAIL  5: expected a MISS that loads tag 2"
 
     ' 6) STORE miss with an INVALID line: it stays invalid
     L1D.Valid = False
@@ -514,24 +515,24 @@ Public Sub Test_CacheL2()
     Clock = 1
     v = CacheReadL1D(0)
     If v <> 100 Then fails = fails + 1: Debug.Print "  FAIL  1: CacheReadL1D(0) = " & v & " (expected 100)"
-    If Stats.l2Miss <> 1 Or Stats.L2Hit <> 0 Then fails = fails + 1: Debug.Print "  FAIL  1: expected 1 L2 miss and 0 L2 hits"
-    If Not L2(0).Valid Or L2(0).tag <> 0 Then fails = fails + 1: Debug.Print "  FAIL  1: L2 line 0 should hold tag 0"
+    If Stats.L2Miss <> 1 Or Stats.L2Hit <> 0 Then fails = fails + 1: Debug.Print "  FAIL  1: expected 1 L2 miss and 0 L2 hits"
+    If Not L2(0).Valid Or L2(0).Tag <> 0 Then fails = fails + 1: Debug.Print "  FAIL  1: L2 line 0 should hold tag 0"
     If CStr(ws.Cells(L2_ROW0, 1).value) <> "L2-0" Or CStr(ws.Cells(L2_ROW0, 2).value) <> "MISS" Then fails = fails + 1: Debug.Print "  FAIL  1: row 22 should show L2-0 and MISS"
 
     ' 2) L1I reads the same line: L1I miss, but L2 HIT (unified)
     Clock = 2
     v = CacheReadL1I(1)
     If v <> 101 Then fails = fails + 1: Debug.Print "  FAIL  2: CacheReadL1I(1) = " & v & " (expected 101)"
-    If Stats.L1IMiss <> 1 Or Stats.L2Hit <> 1 Or Stats.l2Miss <> 1 Then fails = fails + 1: Debug.Print "  FAIL  2: expected L1I miss, L2 hit=1, L2 miss=1"
+    If Stats.L1IMiss <> 1 Or Stats.L2Hit <> 1 Or Stats.L2Miss <> 1 Then fails = fails + 1: Debug.Print "  FAIL  2: expected L1I miss, L2 hit=1, L2 miss=1"
     If CStr(ws.Cells(L2_ROW0, 2).value) <> "HIT" Then fails = fails + 1: Debug.Print "  FAIL  2: row 22 should show HIT"
 
     ' 3) Fill the 4 L2 lines with tags 0..3 (reading lines 1, 2, 3 through L1D)
     Clock = 3: v = CacheReadL1D(8)
     Clock = 4: v = CacheReadL1D(16)
     Clock = 5: v = CacheReadL1D(24)
-    If Stats.l2Miss <> 4 Then fails = fails + 1: Debug.Print "  FAIL  3: expected 4 L2 misses, got " & Stats.l2Miss
+    If Stats.L2Miss <> 4 Then fails = fails + 1: Debug.Print "  FAIL  3: expected 4 L2 misses, got " & Stats.L2Miss
     For i = 0 To 3
-        If Not L2(i).Valid Or L2(i).tag <> i Then fails = fails + 1: Debug.Print "  FAIL  3: L2 line " & i & " should hold tag " & i
+        If Not L2(i).Valid Or L2(i).Tag <> i Then fails = fails + 1: Debug.Print "  FAIL  3: L2 line " & i & " should hold tag " & i
     Next i
 
     ' 4) A 5th line (tag 4): LRU victim is the line with the lowest LastUse.
@@ -539,9 +540,9 @@ Public Sub Test_CacheL2()
     Clock = 6
     v = CacheReadL1D(32)
     If v <> 132 Then fails = fails + 1: Debug.Print "  FAIL  4: CacheReadL1D(32) = " & v & " (expected 132)"
-    If L2(0).tag <> 4 Then fails = fails + 1: Debug.Print "  FAIL  4: LRU must replace L2 line 0 (tag 4), got tag " & L2(0).tag
-    If L2(1).tag <> 1 Or L2(2).tag <> 2 Or L2(3).tag <> 3 Then fails = fails + 1: Debug.Print "  FAIL  4: lines 1..3 must stay untouched"
-    If Stats.l2Miss <> 5 Then fails = fails + 1: Debug.Print "  FAIL  4: expected 5 L2 misses"
+    If L2(0).Tag <> 4 Then fails = fails + 1: Debug.Print "  FAIL  4: LRU must replace L2 line 0 (tag 4), got tag " & L2(0).Tag
+    If L2(1).Tag <> 1 Or L2(2).Tag <> 2 Or L2(3).Tag <> 3 Then fails = fails + 1: Debug.Print "  FAIL  4: lines 1..3 must stay untouched"
+    If Stats.L2Miss <> 5 Then fails = fails + 1: Debug.Print "  FAIL  4: expected 5 L2 misses"
 
     ' 5) LRU keeps a recently used line: touch tag 1 (L2 line 1), then bring tag 5.
     '    Lowest LastUse is now L2 line 2 (Clock 4) -> victim = line 2
@@ -551,8 +552,8 @@ Public Sub Test_CacheL2()
     If Stats.L2Hit <> 2 Then fails = fails + 1: Debug.Print "  FAIL  5: expected 2 L2 hits"
     Clock = 8
     v = CacheReadL1D(40)                 ' tag 5: L2 miss
-    If L2(2).tag <> 5 Then fails = fails + 1: Debug.Print "  FAIL  5: LRU must replace L2 line 2 (tag 5), got tag " & L2(2).tag
-    If L2(1).tag <> 1 Then fails = fails + 1: Debug.Print "  FAIL  5: the recently used line 1 must be kept"
+    If L2(2).Tag <> 5 Then fails = fails + 1: Debug.Print "  FAIL  5: LRU must replace L2 line 2 (tag 5), got tag " & L2(2).Tag
+    If L2(1).Tag <> 1 Then fails = fails + 1: Debug.Print "  FAIL  5: the recently used line 1 must be kept"
 
     ' 6) STORE hit in L2: updates the L2 line and RAM (write-through), counts L2 hit
     Clock = 9
@@ -563,22 +564,22 @@ Public Sub Test_CacheL2()
     If Stats.L2Hit <> 3 Then fails = fails + 1: Debug.Print "  FAIL  6: a STORE hit in L2 must count (3 L2 hits)"
 
     ' 7) STORE miss in L2: the line is NOT loaded, RAM is written, counts L2 miss
-    Dim l2Miss As Long
-    l2Miss = Stats.l2Miss
+    Dim L2Miss As Long
+    L2Miss = Stats.L2Miss
     CacheWriteL1D 56, 9                  ' tag 7 is not in L2
     If L2Find(7) <> -1 Then fails = fails + 1: Debug.Print "  FAIL  7: no-write-allocate: tag 7 must NOT enter L2"
     If RAM(56) <> 9 Then fails = fails + 1: Debug.Print "  FAIL  7: RAM(56) must be 9"
-    If Stats.l2Miss <> l2Miss + 1 Then fails = fails + 1: Debug.Print "  FAIL  7: a STORE miss in L2 must count as an L2 miss"
+    If Stats.L2Miss <> L2Miss + 1 Then fails = fails + 1: Debug.Print "  FAIL  7: a STORE miss in L2 must count as an L2 miss"
 
     ' 8) InvalidateFrame: frame 0 covers tags 0..3. Valid lines in that range die, others stay
     InvalidateFrame 0
     If L2(1).Valid Or L2(3).Valid Then fails = fails + 1: Debug.Print "  FAIL  8: L2 lines with tags 1 and 3 must be invalid"
     If Not L2(0).Valid Or Not L2(2).Valid Then fails = fails + 1: Debug.Print "  FAIL  8: lines with tags 4 and 5 must stay valid"
-    L1I.Valid = True: L1I.tag = 2
-    L1D.Valid = True: L1D.tag = 3
+    L1I.Valid = True: L1I.Tag = 2
+    L1D.Valid = True: L1D.Tag = 3
     InvalidateFrame 0
     If L1I.Valid Or L1D.Valid Then fails = fails + 1: Debug.Print "  FAIL  8: L1I (tag 2) and L1D (tag 3) must be invalid"
-    L1I.Valid = True: L1I.tag = 4
+    L1I.Valid = True: L1I.Tag = 4
     InvalidateFrame 0
     If Not L1I.Valid Then fails = fails + 1: Debug.Print "  FAIL  8: L1I with tag 4 (frame 1) must stay valid"
 
@@ -610,13 +611,13 @@ Public Sub Demo_CacheL2()
         v = CacheReadL1D(i * LINE_SIZE)
         Debug.Print "  LOAD paddr " & (i * LINE_SIZE) & " (tag " & i & ") -> L2 " & IIf(Stats.L2Hit > before, "HIT ", "MISS") & "   data = " & Hex2(v)
     Next i
-    Debug.Print "  Tag 4 replaced the least recently used line: L2 line 0 now holds tag " & L2(0).tag
+    Debug.Print "  Tag 4 replaced the least recently used line: L2 line 0 now holds tag " & L2(0).Tag
     Clock = 6
     before = Stats.L2Hit
     L1D.Valid = False
     v = CacheReadL1D(8)
     Debug.Print "  LOAD paddr 8 (tag 1) -> L2 " & IIf(Stats.L2Hit > before, "HIT ", "MISS") & "   (L1D was invalid)"
-    Debug.Print "  L2: hits = " & Stats.L2Hit & ", misses = " & Stats.l2Miss
+    Debug.Print "  L2: hits = " & Stats.L2Hit & ", misses = " & Stats.L2Miss
 End Sub
 
 ' For the PR screenshot of the previous levels (kept from K7)
@@ -640,7 +641,7 @@ Public Sub Demo_CacheL1D()
 
     before = Stats.L1DHit
     CacheWriteL1D 12, &HBB
-    Debug.Print "  STORE paddr 12 -> " & IIf(Stats.L1DHit > before, "HIT ", "MISS") & "   RAM = " & Hex2(RAM(12)) & ", line NOT loaded (tag still " & L1D.tag & ")"
+    Debug.Print "  STORE paddr 12 -> " & IIf(Stats.L1DHit > before, "HIT ", "MISS") & "   RAM = " & Hex2(RAM(12)) & ", line NOT loaded (tag still " & L1D.Tag & ")"
 
     before = Stats.L1DHit
     v = CacheReadL1D(12)
