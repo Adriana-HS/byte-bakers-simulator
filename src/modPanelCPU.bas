@@ -16,10 +16,10 @@ Private Const BOX_W As Single = 72
 Private Const BOX_H As Single = 28
 Private Const BUF_W As Single = 18
 Private Const BUF_H As Single = 18
-Private Const SIG_W As Single = 20
+Private Const SIG_W As Single = 40
 Private Const SIG_H As Single = 14
 
-' Soft chrome (hierarchy) — values still use coral/amber/gray dynamically
+' Soft chrome (hierarchy). Values still use coral, amber and gray dynamically.
 Private Const CLR_LABEL As Long = &HC8B4A0&      ' RGB(160,180,200) muted label
 Private Const CLR_CHIP As Long = &H4A3828&       ' RGB(40,56,74) chip bg
 Private Const CLR_CLK_ON As Long = &H5AD8D8&     ' RGB(216,216,90) CLK pulse
@@ -43,6 +43,7 @@ Public Sub BuildCPUPanel(ByVal ws As Worksheet)
     Dim x As Single, y As Single
     Dim i As Integer
     Dim nm As String
+    Dim s As Shape
 
     On Error GoTo EH
     mPrevIsaRow = 0
@@ -100,33 +101,36 @@ Public Sub BuildCPUPanel(ByVal ws As Worksheet)
     AddBox ws, PFX_BUF & "LCD", x, y + 28, BUF_W + 30, BUF_H + 6, "LCD", CLR_HIGHZ
     AddBox ws, PFX_BUF & "MEM", x, y + 56, BUF_W + 30, BUF_H + 6, "MEM", CLR_HIGHZ
 
-    ' --- Buses (separate INT 9-bit vs EXT 8-bit address + data) ---
+    ' --- Buses. Value on the left. The wire stops before the history. ---
     y = PANEL_T + 220
-    AddBox ws, "lbl_Buses", PANEL_L, y, 200, 14, "BUSES  INT=9-bit  EXT=8-bit", CLR_CHIP
-    y = y + 16
-    UI_AddWire ws, PFX_WIRE & "INT_ADDR", PANEL_L, y + 6, PANEL_L + 520, y + 6, 3
-    AddBox ws, "val_INT_ADDR", PANEL_L + 524, y - 6, 90, 18, "INT —", CLR_CHIP
-    y = y + 16
-    UI_AddWire ws, PFX_WIRE & "ADDR", PANEL_L, y + 6, PANEL_L + 520, y + 6, 3
-    AddBox ws, "val_EXT_ADDR", PANEL_L + 524, y - 6, 90, 18, "EXT —", CLR_CHIP
-    y = y + 16
-    UI_AddWire ws, PFX_WIRE & "INT_DATA", PANEL_L, y + 6, PANEL_L + 520, y + 6, 3
-    AddBox ws, "val_INT_DATA", PANEL_L + 524, y - 6, 90, 18, "ID —", CLR_CHIP
-    y = y + 16
-    UI_AddWire ws, PFX_WIRE & "DATA", PANEL_L, y + 6, PANEL_L + 520, y + 6, 3
-    AddBox ws, "val_DATA", PANEL_L + 524, y - 6, 90, 18, "D —", CLR_CHIP
+    AddBox ws, "lbl_Buses", PANEL_L, y, 240, 14, "BUSES    INT 9-bit     EXT 8-bit", CLR_CHIP
+    y = y + 14
+    AddBusRow ws, "val_INT_ADDR", "INT HiZ", PFX_WIRE & "INT_ADDR", y
+    y = y + 14
+    AddBusRow ws, "val_EXT_ADDR", "EXT HiZ", PFX_WIRE & "ADDR", y
+    y = y + 14
+    AddBusRow ws, "val_INT_DATA", "ID HiZ", PFX_WIRE & "INT_DATA", y
+    y = y + 14
+    AddBusRow ws, "val_DATA", "D HiZ", PFX_WIRE & "DATA", y
 
-    ' --- Control word strip + CLK (bottom of CPU frame) ---
-    y = PANEL_T + 300
-    AddBox ws, "lbl_CW", PANEL_L, y - 16, 180, 14, "CONTROL WORD + CLK", CLR_CHIP
+    ' --- Control word. Named lights, two rows, under the history columns. ---
+    y = PANEL_T + 292
+    AddBox ws, "lbl_CW", PANEL_L, y, 160, 14, "CONTROL WORD", CLR_CHIP
+    AddBox ws, PFX_SIG & "CLK", PANEL_L + 400, y, 72, 14, "CLK", CLR_HIGHZ
+    y = y + 14
     For i = 0 To NUM_SIGNALS - 1
         nm = SignalName(i)
         If Len(nm) > 0 Then
-            x = PANEL_L + (i Mod 14) * (SIG_W + 2)
-            AddBox ws, PFX_SIG & nm, x, y + (i \ 14) * (SIG_H + 2), SIG_W, SIG_H, ShortSig(nm), CLR_HIGHZ
+            x = PANEL_L + (i Mod 14) * (SIG_W + 3)
+            Set s = UI_AddBox(ws, PFX_SIG & nm, x, y + (i \ 14) * (SIG_H + 1), SIG_W, SIG_H, ShortSig(nm), CLR_HIGHZ)
+            s.TextFrame2.MarginLeft = 0
+            s.TextFrame2.MarginRight = 0
+            s.TextFrame2.MarginTop = 0
+            s.TextFrame2.MarginBottom = 0
+            s.TextFrame2.TextRange.Font.Size = 8
+            s.TextFrame2.TextRange.Font.Name = "Consolas"
         End If
     Next i
-    AddBox ws, PFX_SIG & "CLK", PANEL_L + 520, y, 60, 20, "CLK", CLR_HIGHZ
 
     RefreshCPUPanel
     Exit Sub
@@ -150,10 +154,43 @@ Private Sub AddBox(ByVal ws As Worksheet, ByVal nm As String, ByVal l As Single,
     On Error GoTo 0
 End Sub
 
+Private Sub AddBusRow(ByVal ws As Worksheet, ByVal valName As String, _
+        ByVal caption As String, ByVal wireName As String, ByVal y As Single)
+    AddBox ws, valName, PANEL_L, y, 78, 14, caption, CLR_CHIP
+    UI_AddWire ws, wireName, PANEL_L + 86, y + 7, 536, y + 7, 3
+End Sub
+
 Private Function ShortSig(ByVal nm As String) As String
-    ' Compact label so 27 lights fit the strip
-    ShortSig = Replace(Replace(Replace(nm, "En_", "E"), "Ld_", "L"), "Inc_", "I")
-    If Len(ShortSig) > 4 Then ShortSig = Left$(ShortSig, 4)
+    Select Case nm
+        Case "En_PC": ShortSig = "EnPC"
+        Case "Ld_PC": ShortSig = "LdPC"
+        Case "Inc_PC": ShortSig = "+PC"
+        Case "Ld_MAR": ShortSig = "MAR"
+        Case "Ld_MDR": ShortSig = "MDR"
+        Case "En_MDR": ShortSig = "eMDR"
+        Case "Ld_IR": ShortSig = "LdIR"
+        Case "En_IR_A": ShortSig = "IRa"
+        Case "En_AX": ShortSig = "EAX"
+        Case "En_BX": ShortSig = "EBX"
+        Case "En_CX": ShortSig = "ECX"
+        Case "En_DX": ShortSig = "EDX"
+        Case "Ld_AX": ShortSig = "LAX"
+        Case "Ld_BX": ShortSig = "LBX"
+        Case "Ld_CX": ShortSig = "LCX"
+        Case "Ld_DX": ShortSig = "LDX"
+        Case "Ld_TA": ShortSig = "LTA"
+        Case "Ld_TB": ShortSig = "LTB"
+        Case "En_ALU": ShortSig = "ALU"
+        Case "Ld_FLAGS": ShortSig = "FLAG"
+        Case "Mem_R": ShortSig = "MemR"
+        Case "Mem_W": ShortSig = "MemW"
+        Case "IO_R": ShortSig = "IOr"
+        Case "IO_W": ShortSig = "IOw"
+        Case "En_KBD": ShortSig = "KBD"
+        Case "Ld_LCD": ShortSig = "LCD"
+        Case "En_IR_D": ShortSig = "IRd"
+        Case Else: ShortSig = Left$(nm, 4)
+    End Select
 End Function
 
 ' =====================================================================
@@ -207,9 +244,9 @@ Public Sub RefreshCPUPanel()
     ' Bus values
     UI_SetText "val_INT_ADDR", "INT " & BusHex(Bus.IntAddr, True)
     UI_SetText "val_EXT_ADDR", "EXT " & BusHex(Bus.ExtAddr, False)
-    UI_SetText "val_INT_DATA", "ID " & IIf(Bus.Internal, BusHex(Bus.Data, False), "—")
+    UI_SetText "val_INT_DATA", "ID " & IIf(Bus.Internal, BusHex(Bus.Data, False), "HiZ")
     UI_SetText "val_DATA", "D " & IIf(Not Bus.Internal And Bus.Data <> HIGH_Z, BusHex(Bus.Data, False), _
-        IIf(Bus.Data = HIGH_Z, "—", BusHex(Bus.Data, False)))
+        IIf(Bus.Data = HIGH_Z, "HiZ", BusHex(Bus.Data, False)))
 
     ' Active address driver
     If Len(Bus.AddrDriver) > 0 And Bus.IntAddr <> HIGH_Z Then
@@ -239,13 +276,13 @@ Public Sub RefreshCPUPanel()
         UI_Highlight PFX_REG & recv, CLR_LOAD
     End If
 
-    ' Transfer label e.g. MDR → AX
+    ' Transfer label e.g. MDR -> AX
     If Len(Bus.DataDriver) > 0 And Len(recv) > 0 Then
-        UI_SetText "lbl_Transfer", Bus.DataDriver & " → " & recv
+        UI_SetText "lbl_Transfer", Bus.DataDriver & " -> " & recv
     ElseIf Len(Bus.AddrDriver) > 0 And (cw And SIG_LD_MAR) <> 0 Then
-        UI_SetText "lbl_Transfer", Bus.AddrDriver & " → MAR"
+        UI_SetText "lbl_Transfer", Bus.AddrDriver & " -> MAR"
     ElseIf Len(Bus.DataDriver) > 0 Then
-        UI_SetText "lbl_Transfer", Bus.DataDriver & " → bus"
+        UI_SetText "lbl_Transfer", Bus.DataDriver & " -> bus"
     Else
         UI_SetText "lbl_Transfer", "idle"
     End If
@@ -267,7 +304,7 @@ Public Sub RefreshCPUPanel()
         End If
     Next i
     UI_SetFill PFX_SIG & "CLK", IIf(Bus.Clk, CLR_CLK_ON, CLR_HIGHZ)
-    UI_SetText PFX_SIG & "CLK", IIf(Bus.Clk, "CLK●", "CLK")
+    UI_SetText PFX_SIG & "CLK", IIf(Bus.Clk, "CLK ON", "CLK")
 
     ' Highlight current IR opcode row on ISA sheet (cells, not shapes)
     Decode CPU.IR, op, reg, operand
@@ -365,9 +402,9 @@ End Sub
 Private Sub BuildHistory(ByVal ws As Worksheet)
     Dim c As Integer
     Dim s As Shape
-    AddBox ws, "lbl_Hist", 552, 244, 100, 12, "LAST 8", CLR_CHIP
+    AddBox ws, "lbl_Hist", 556, 248, 90, 12, "LAST 8", CLR_CHIP
     For c = 1 To 8
-        Set s = UI_AddBox(ws, "hist_" & c, 552 + (c - 1) * 13, 258, 12, 96, ZeroBits(), CLR_CHIP)
+        Set s = UI_AddBox(ws, "hist_" & c, 556 + (c - 1) * 12, 262, 10, 84, ZeroBits(), CLR_CHIP)
         s.TextFrame2.TextRange.Font.Size = 5
         s.TextFrame2.TextRange.Font.Name = "Consolas"
         s.TextFrame2.WordWrap = msoTrue
@@ -551,7 +588,7 @@ Public Function Test_PanelCPU() As Long
         fails = fails + PanCheck("shape " & names(i), ShapeExists(ws, CStr(names(i))))
     Next i
 
-    ' Simulate MDR → AX transfer
+    ' Simulate MDR -> AX transfer
     ResetCPU
     ReleaseBuses
     SetMDR &H2A
