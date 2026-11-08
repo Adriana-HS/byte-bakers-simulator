@@ -24,6 +24,4 @@ End Sub
 
 ' --- K10. A8 StepMicro/RunProgram/MicroStep live in modControlUnit. ---
 ' --- A9 BuildCPUPanel/RefreshCPUPanel live in modPanelCPU. ---
-Public Sub BuildMiniMemory(ByVal ws As Worksheet)
-End Sub
 ' RefreshMemoryPanel / RefreshStats already exist in modStubs_Karen.

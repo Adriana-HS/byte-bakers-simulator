@@ -2,6 +2,19 @@ Attribute VB_Name = "modPanelMemory"
 Option Explicit
 ' =====================================================================
 ' modPanelMemory - Memory panel drawn with shapes (K10)
+'
+' CODE OF THE "Memory" SHEET (lives only in the .xlsm, not in the repo).
+' When the Excel is integrated, copy these two handlers into the sheet
+' object "Memory" (a sheet .cls is not re-attached by the module import):
+'
+'   Private Sub Worksheet_SelectionChange(ByVal Target As Range)
+'       OnPageTableClick Target
+'   End Sub
+'
+'   Private Sub Worksheet_Change(ByVal Target As Range)
+'       OnMemoryCellEdit Target
+'   End Sub
+'
 ' Piece 1: static layout. 8 frames (frm_0..7), L1I, L1D and the four L2
 ' lines, each with a label chip (lbl_<name>) where UI_CacheFlash writes
 ' HIT / MISS. The panel lives on the Memory sheet below row 28, so the
@@ -23,6 +36,9 @@ Option Explicit
 ' bytes of the frame of the clicked page. Typing a hex value in a cell
 ' writes RAM, marks the page dirty, invalidates the caches of that frame
 ' and refreshes the panel (OnMemoryCellEdit, called by Worksheet_Change).
+' Piece 8: BuildMiniMemory. A summary of the 8 frames inside the MEMORY
+' frame (frm_MEM) of the Simulator sheet (shapes mini_*). It is repainted
+' by RefreshMemoryPanel, so RefreshAll keeps it up to date.
 ' =====================================================================
 
 Private Const PANEL_TOP_ROW As Long = 28
@@ -62,6 +78,21 @@ Private Const CACHE_H As Single = 36
 Private Const CHIP_H As Single = 16
 Private Const PREVIEW_BYTES As Integer = 3
 Private Const HL_WEIGHT As Single = 4       ' outline weight of a highlighted frame
+
+' Piece 8: mini memory summary inside frm_MEM of the Simulator sheet.
+' frm_MEM is at left 680, top 50, 640 x 344 (modDashboard).
+Private Const MINI_PREFIX As String = "mini_"
+Private Const MINI_TITLE_NAME As String = "mini_title"
+Private Const MINI_INFO_NAME As String = "mini_info"
+Private Const MINI_X As Single = 696        ' 16 pt inside the frame
+Private Const MINI_TITLE_Y As Single = 66
+Private Const MINI_TOP As Single = 92
+Private Const MINI_COLS As Integer = 4
+Private Const MINI_BOX_W As Single = 140
+Private Const MINI_BOX_H As Single = 70
+Private Const MINI_GAP As Single = 16
+Private Const MINI_INFO_Y As Single = 260
+Private Const MINI_INFO_H As Single = 36
 
 ' Piece 6b: which frame is highlighted (-1 = none) and its original outline
 Private hlPfn As Integer
@@ -132,6 +163,79 @@ Private Sub AddCacheBox(ByVal ws As Worksheet, ByVal nm As String, _
     UI_AddBox ws, nm, l, t, BOX_W, CACHE_H, txt
     Set chip = UI_AddBox(ws, "lbl_" & nm, l, t + CACHE_H + 2, BOX_W, CHIP_H, "")
     chip.TextFrame2.TextRange.Font.size = 9
+End Sub
+
+' ---------- Piece 8: mini memory summary on the Simulator sheet ----------
+
+' Called by BuildDashboard (modDashboard) with the Simulator sheet.
+' Draws a title, the 8 frames in 2 rows of 4 and an info line (policy and
+' page faults) inside frm_MEM. The shapes are named mini_* so they never
+' clash with frm_0..7 of the Memory sheet (UI_SetFill looks in Simulator
+' first). Frame 7 is fixed text, the others are filled by RefreshMiniMemory.
+Public Sub BuildMiniMemory(ByVal ws As Worksheet)
+    Dim i As Integer, l As Single, t As Single, s As Shape
+
+    Set s = UI_AddBox(ws, MINI_TITLE_NAME, MINI_X, MINI_TITLE_Y, 608, 20, _
+        "Physical memory: 8 frames x 32 B (full panel in the Memory sheet)")
+    s.fill.Visible = msoFalse
+    s.line.Visible = msoFalse
+    With s.TextFrame2
+        .MarginLeft = 0
+        .WordWrap = msoFalse
+        .TextRange.Font.fill.ForeColor.RGB = CLR_TEXT
+        .TextRange.ParagraphFormat.Alignment = msoAlignLeft
+    End With
+
+    For i = 0 To NUM_FRAMES - 1
+        l = MINI_X + (i Mod MINI_COLS) * (MINI_BOX_W + MINI_GAP)
+        t = MINI_TOP + (i \ MINI_COLS) * (MINI_BOX_H + 12)
+        If i = IO_FRAME Then
+            UI_AddBox ws, MINI_PREFIX & i, l, t, MINI_BOX_W, MINI_BOX_H, _
+                "F" & i & vbLf & "I/O (P" & IO_VPAGE & ")"
+        Else
+            UI_AddBox ws, MINI_PREFIX & i, l, t, MINI_BOX_W, MINI_BOX_H, _
+                "F" & i & vbLf & "free"
+        End If
+    Next i
+
+    UI_AddBox ws, MINI_INFO_NAME, MINI_X, MINI_INFO_Y, 608, MINI_INFO_H, ""
+    RefreshMiniMemory
+End Sub
+
+' Repaints the mini summary from the machine state. Does nothing if the
+' Simulator sheet or the mini shapes do not exist yet.
+Private Sub RefreshMiniMemory()
+    Dim ws As Worksheet, i As Integer, k As Integer
+    Dim owner As Integer, base As Integer, preview As String
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(SH_SIM)
+    On Error GoTo 0
+    If ws Is Nothing Then Exit Sub
+    If Not HasShape(ws, MINI_PREFIX & "0") Then Exit Sub
+
+    For i = 0 To NUM_FRAMES - 1
+        If i <> IO_FRAME Then
+            owner = FrameOwner(i)
+            If owner < 0 Then
+                UI_SetText MINI_PREFIX & i, "F" & i & vbLf & "free"
+                UI_SetFill MINI_PREFIX & i, CLR_HIGHZ
+            Else
+                base = i * PAGE_SIZE
+                preview = ""
+                For k = 0 To BytesToShow() - 1
+                    If k > 0 Then preview = preview & " "
+                    preview = preview & FormatByte(RAM(base + k))
+                Next k
+                UI_SetText MINI_PREFIX & i, "F" & i & "  P" & owner & vbLf & preview
+                UI_SetFill MINI_PREFIX & i, CLR_LOAD
+            End If
+        End If
+    Next i
+
+    If HasShape(ws, MINI_INFO_NAME) Then
+        UI_SetText MINI_INFO_NAME, "Policy: " & IIf(ReplacePolicy = POLICY_LRU, "LRU", "FIFO") & _
+            "  |  Page faults: " & Stats.PageFaults
+    End If
 End Sub
 
 ' ---------- Piece 6a: replacement policy selector ----------
@@ -325,7 +429,7 @@ Private Sub RefreshEditGrid(ByVal ws As Worksheet)
     Exit Sub
 fail:
     Application.EnableEvents = oldEv
-    Debug.Print "RefreshEditGrid error: " & Err.Description
+    Debug.Print "RefreshEditGrid error: " & Err.description
 End Sub
 
 ' True if txt is 1 or 2 hex digits
@@ -379,7 +483,7 @@ Public Sub OnMemoryCellEdit(ByVal Target As Range)
     Exit Sub
 fail:
     Application.EnableEvents = oldEv
-    Debug.Print "OnMemoryCellEdit error: " & Err.Description
+    Debug.Print "OnMemoryCellEdit error: " & Err.description
 End Sub
 
 ' Repaints the panel from the current machine state:
@@ -389,6 +493,7 @@ End Sub
 '  - cache boxes go back to grey and their HIT/MISS chips are cleared
 '  - the policy and format selectors match the current choices
 '  - the RAM editor grid shows the current bytes of its frame
+'  - the mini summary on the Simulator sheet (piece 8) is repainted
 Public Sub RefreshMemoryPanel()
     Dim ws As Worksheet, i As Integer, k As Integer
     Dim owner As Integer, base As Integer, preview As String
@@ -425,6 +530,7 @@ Public Sub RefreshMemoryPanel()
     PaintPolicySelector ws
     PaintFormatSelector ws
     RefreshEditGrid ws
+    RefreshMiniMemory
 End Sub
 
 ' One cache box back to grey, its label chip empty
@@ -1053,5 +1159,79 @@ Public Sub Test_RamEdit()
     BuildMemoryPanel
 
     Debug.Print IIf(fails = 0, "Test_RamEdit: ALL OK", "Test_RamEdit: " & fails & " FAIL(S)")
+End Sub
+
+Public Sub Test_MiniMemory()
+    Dim fails As Integer, i As Integer, ws As Worksheet, t As String
+    Dim oldOwner As Integer, oldB0 As Integer, oldB1 As Integer, oldB2 As Integer
+    Dim oldFmt As Integer, oldPolicy As Integer
+    Set ws = ThisWorkbook.Worksheets(SH_SIM)
+    BuildMemoryPanel
+    BuildMiniMemory ws
+
+    ' Save the state this test changes. The test starts in the HEX view.
+    oldOwner = FrameOwner(0)
+    oldB0 = RAM(0): oldB1 = RAM(1): oldB2 = RAM(2)
+    oldFmt = viewFmt
+    oldPolicy = ReplacePolicy
+    viewFmt = FMT_HEX
+
+    ' 1) Every mini shape exists
+    For i = 0 To NUM_FRAMES - 1
+        If Not HasShape(ws, MINI_PREFIX & i) Then fails = fails + 1: Debug.Print "  FAIL  1: missing shape " & MINI_PREFIX & i
+    Next i
+    If Not HasShape(ws, MINI_TITLE_NAME) Then fails = fails + 1: Debug.Print "  FAIL  1: missing " & MINI_TITLE_NAME
+    If Not HasShape(ws, MINI_INFO_NAME) Then fails = fails + 1: Debug.Print "  FAIL  1: missing " & MINI_INFO_NAME
+
+    ' 2) Frame 0 owned by page 3: the refresh of the Memory panel repaints the mini
+    FrameOwner(0) = 3
+    RAM(0) = &H1A: RAM(1) = &HFF: RAM(2) = &H5
+    RefreshMemoryPanel
+    t = ws.Shapes(MINI_PREFIX & "0").TextFrame2.TextRange.Text
+    If InStr(t, "P3") = 0 Then fails = fails + 1: Debug.Print "  FAIL  2: mini_0 must show P3, got: " & Replace(t, vbLf, "/")
+    If InStr(t, "1A FF 05") = 0 Then fails = fails + 1: Debug.Print "  FAIL  2: mini_0 must show 1A FF 05, got: " & Replace(t, vbLf, "/")
+    If ws.Shapes(MINI_PREFIX & "0").fill.ForeColor.RGB <> CLR_LOAD Then fails = fails + 1: Debug.Print "  FAIL  2: occupied mini frame must use CLR_LOAD"
+
+    ' 3) BIN view
+    viewFmt = FMT_BIN
+    RefreshMemoryPanel
+    t = ws.Shapes(MINI_PREFIX & "0").TextFrame2.TextRange.Text
+    If InStr(t, "00011010 11111111") = 0 Then fails = fails + 1: Debug.Print "  FAIL  3: mini_0 must show BIN bytes, got: " & Replace(t, vbLf, "/")
+    viewFmt = FMT_HEX
+
+    ' 4) Frame 0 free again
+    FrameOwner(0) = -1
+    RefreshMemoryPanel
+    t = ws.Shapes(MINI_PREFIX & "0").TextFrame2.TextRange.Text
+    If InStr(t, "free") = 0 Then fails = fails + 1: Debug.Print "  FAIL  4: mini_0 must say free, got: " & Replace(t, vbLf, "/")
+    If ws.Shapes(MINI_PREFIX & "0").fill.ForeColor.RGB <> CLR_HIGHZ Then fails = fails + 1: Debug.Print "  FAIL  4: free mini frame must be grey"
+
+    ' 5) Frame 7 keeps its I/O text
+    t = ws.Shapes(MINI_PREFIX & IO_FRAME).TextFrame2.TextRange.Text
+    If InStr(t, "I/O") = 0 Then fails = fails + 1: Debug.Print "  FAIL  5: mini_7 must keep I/O text"
+
+    ' 6) Info line follows the policy
+    ReplacePolicy = POLICY_LRU
+    RefreshMemoryPanel
+    t = ws.Shapes(MINI_INFO_NAME).TextFrame2.TextRange.Text
+    If InStr(t, "LRU") = 0 Then fails = fails + 1: Debug.Print "  FAIL  6: mini_info must say LRU, got: " & t
+    ReplacePolicy = POLICY_FIFO
+    RefreshMemoryPanel
+    t = ws.Shapes(MINI_INFO_NAME).TextFrame2.TextRange.Text
+    If InStr(t, "FIFO") = 0 Then fails = fails + 1: Debug.Print "  FAIL  6: mini_info must say FIFO, got: " & t
+
+    ' 7) The mini names do not clash with the frames of the Memory sheet
+    If Not HasShape(ThisWorkbook.Worksheets(SH_MEM), PFX_FRM & "0") Then fails = fails + 1: Debug.Print "  FAIL  7: frm_0 of the Memory sheet must still exist"
+    If HasShape(ws, PFX_FRM & "0") Then fails = fails + 1: Debug.Print "  FAIL  7: frm_0 must not exist on the Simulator sheet"
+
+    ' Cleanup: restore the state and redraw
+    FrameOwner(0) = oldOwner
+    RAM(0) = oldB0: RAM(1) = oldB1: RAM(2) = oldB2
+    viewFmt = oldFmt
+    ReplacePolicy = oldPolicy
+    BuildMemoryPanel
+    RefreshMemoryPanel
+
+    Debug.Print IIf(fails = 0, "Test_MiniMemory: ALL OK", "Test_MiniMemory: " & fails & " FAIL(S)")
 End Sub
 
