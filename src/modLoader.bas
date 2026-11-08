@@ -51,6 +51,7 @@ Public Sub BuildProgramsSheet()
     AddLoaderButton ws, "btn_LVerify", 340, 150, "VERIFY", "BtnVerify"
     AddLoaderButton ws, "btn_LLoad", 440, 150, "LOAD", "BtnLoad"
     AddLoaderButton ws, "btn_LSave", 540, 150, "SAVE", "BtnSave"
+    AddLoaderButton ws, "btn_LSaved", 640, 150, "SAVED", "BtnUseSaved"
 
     OpenCatalog 1
     Application.ScreenUpdating = True
@@ -113,7 +114,7 @@ Public Sub VerifyEditor()
         lineNo = LineNoOf(msg)
         If lineNo > 0 Then
             ws.Cells(ED_ROW + lineNo - 1, 2).Interior.Color = CLR_MISS
-            ws.Cells(ED_ROW + lineNo - 1, 2).Font.Color = CLR_TEXT
+            ws.Cells(ED_ROW + lineNo - 1, 2).Font.Color = CLR_BG
         End If
     Next i
 End Sub
@@ -151,6 +152,7 @@ Public Sub LoadEditor()
     ResetMachine
     DemandPaging
     RefreshAll
+    ThisWorkbook.Worksheets(SH_SIM).Activate
 End Sub
 
 Public Sub SaveProgram(ByVal nm As String)
@@ -205,6 +207,7 @@ Public Function Test_Loader() As Long
     VerifyEditor
     fails = fails + LdCheck("bad line is red", ws.Cells(ED_ROW, 2).Interior.Color = CLR_MISS)
     fails = fails + LdCheck("bad line has a message", Not AsmErrors Is Nothing And AsmErrors.Count > 0)
+    fails = fails + LdCheck("message is on the sheet", InStr(CStr(ws.Range("B3").Value), "Line ") = 1)
 
     OpenCatalog 2
     LoadEditor
