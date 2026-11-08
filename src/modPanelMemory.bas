@@ -19,6 +19,10 @@ Option Explicit
 ' outline and the translation strip shows that page (OnPageTableClick).
 ' Piece 6c: HEX / BIN / DEC view of the bytes shown in the frames
 ' (fmt_hex / fmt_bin / fmt_dec, row 42).
+' Piece 7: live RAM editor. A 4x8 grid of cells (A47:H50) shows the 32
+' bytes of the frame of the clicked page. Typing a hex value in a cell
+' writes RAM, marks the page dirty, invalidates the caches of that frame
+' and refreshes the panel (OnMemoryCellEdit, called by Worksheet_Change).
 ' =====================================================================
 
 Private Const PANEL_TOP_ROW As Long = 28
@@ -38,6 +42,11 @@ Private Const FMT_H As Single = 24
 Private Const FMT_HEX As Integer = 0
 Private Const FMT_BIN As Integer = 1
 Private Const FMT_DEC As Integer = 2
+Private Const EDIT_TITLE_ROW As Long = 45
+Private Const EDIT_LABEL_ROW As Long = 46
+Private Const EDIT_FIRST_ROW As Long = 47   ' grid: bytes 0..7 on this row
+Private Const EDIT_COLS As Long = 8         ' grid: 8 bytes per row, columns A..H
+Private Const EDIT_RANGE As String = "A47:H50"
 Private Const TOKEN_NAME As String = "tok_swap"
 Private Const FILL_TOKEN_NAME As String = "tok_fill"
 Private Const TOKEN_W As Single = 36
@@ -63,6 +72,10 @@ Private hlActive As Boolean
 
 ' Piece 6c: number format of the bytes in the frames (FMT_HEX by default)
 Private viewFmt As Integer
+
+' Piece 7: frame shown in the RAM editor. 0 = none, otherwise pfn + 1
+' (so the default value 0 of a fresh module means "no frame").
+Private editSel As Integer
 
 ' Draws (or redraws) the whole panel. Safe to call many times:
 ' UI_AddBox deletes a shape with the same name before creating it.
@@ -106,6 +119,10 @@ Public Sub BuildMemoryPanel()
 
     ' Number format selector under the policy selector
     BuildFormatSelector ws, leftX
+
+    ' RAM editor grid: no frame selected yet
+    editSel = 0
+    RefreshEditGrid ws
 End Sub
 
 ' A cache box plus its label chip underneath (lbl_<name>)
@@ -214,21 +231,29 @@ End Function
 ' Called by Worksheet_SelectionChange of the Memory sheet.
 ' If the selection is one row inside the page table (A2:E17):
 '  - the translation strip shows that page (offset 0), green or PAGE FAULT
-'  - if the page is in RAM, its frame gets a thick outline
+'  - if the page is in RAM, its frame gets a thick outline and its 32
+'    bytes are loaded in the RAM editor grid (piece 7)
+'  - if the page is not in RAM, the editor grid is cleared
 ' Any other selection is ignored (the current highlight stays).
-Public Sub OnPageTableClick(ByVal target As Range)
+Public Sub OnPageTableClick(ByVal Target As Range)
     Dim ws As Worksheet, vpn As Integer
     Set ws = ThisWorkbook.Worksheets(SH_MEM)
-    If target.Rows.Count <> 1 Then Exit Sub
-    If Intersect(target, ws.Range("A2:E17")) Is Nothing Then Exit Sub
+    If Target.Rows.Count <> 1 Then Exit Sub
+    If Intersect(Target, ws.Range("A2:E17")) Is Nothing Then Exit Sub
 
-    vpn = target.row - PT_FIRST_ROW
+    vpn = Target.row - PT_FIRST_ROW
     If vpn < 0 Or vpn >= NUM_VPAGES Then Exit Sub
 
     If Not HasShape(ws, PFX_FRM & "0") Then BuildMemoryPanel
     ClearFrameHighlight ws
     ShowTranslation vpn, 0
-    If PageTable(vpn).Present Then HighlightFrame ws, PageTable(vpn).pfn
+    If PageTable(vpn).Present Then
+        HighlightFrame ws, PageTable(vpn).pfn
+        editSel = PageTable(vpn).pfn + 1
+    Else
+        editSel = 0
+    End If
+    RefreshEditGrid ws
 End Sub
 
 ' Thick outline on frame <pfn>. Remembers the original outline to restore it.
@@ -259,12 +284,111 @@ Private Sub ClearFrameHighlight(ByVal ws As Worksheet)
     shp.line.Visible = hlVisible
 End Sub
 
+' ---------- Piece 7: live RAM editor ----------
+
+' Fills (or clears) the grid A47:H50 with the 32 bytes of the selected
+' frame, always in hex, two digits per cell. Writes with events off so
+' Worksheet_Change does not fire.
+Private Sub RefreshEditGrid(ByVal ws As Worksheet)
+    Dim oldEv As Boolean, idx As Integer, base As Integer, owner As Integer
+    oldEv = Application.EnableEvents
+    Application.EnableEvents = False
+    On Error GoTo fail
+
+    ws.Cells(EDIT_TITLE_ROW, 1).value = "RAM editor (hex, 2 digits per cell)"
+    ws.Cells(EDIT_TITLE_ROW, 1).Font.bold = True
+    With ws.Range(EDIT_RANGE)
+        .NumberFormat = "@"
+        .HorizontalAlignment = xlCenter
+        .Font.Name = "Consolas"
+        .Borders.LineStyle = xlContinuous
+    End With
+
+    If editSel = 0 Then
+        ws.Range(EDIT_RANGE).ClearContents
+        ws.Cells(EDIT_LABEL_ROW, 1).value = "Click a page in the table (A2:E17) to load its frame here"
+    Else
+        owner = FrameOwner(editSel - 1)
+        If owner < 0 Then
+            ws.Range(EDIT_RANGE).ClearContents
+            ws.Cells(EDIT_LABEL_ROW, 1).value = "Frame F" & (editSel - 1) & " is free"
+        Else
+            base = (editSel - 1) * PAGE_SIZE
+            ws.Cells(EDIT_LABEL_ROW, 1).value = "Frame F" & (editSel - 1) & " (P" & owner & "), bytes 0..31. Type a hex value to change RAM"
+            For idx = 0 To PAGE_SIZE - 1
+                ws.Cells(EDIT_FIRST_ROW + idx \ EDIT_COLS, 1 + idx Mod EDIT_COLS).value = _
+                    Right$("0" & Hex$(RAM(base + idx) And BYTE_MAX), 2)
+            Next idx
+        End If
+    End If
+    Application.EnableEvents = oldEv
+    Exit Sub
+fail:
+    Application.EnableEvents = oldEv
+    Debug.Print "RefreshEditGrid error: " & Err.Description
+End Sub
+
+' True if txt is 1 or 2 hex digits
+Private Function IsHexByte(ByVal txt As String) As Boolean
+    Dim i As Integer, ch As String
+    If Len(txt) < 1 Or Len(txt) > 2 Then Exit Function
+    For i = 1 To Len(txt)
+        ch = Mid$(txt, i, 1)
+        If InStr("0123456789ABCDEFabcdef", ch) = 0 Then Exit Function
+    Next i
+    IsHexByte = True
+End Function
+
+' Called by Worksheet_Change of the Memory sheet. For every changed cell
+' inside the editor grid: writes the byte to RAM, marks its page dirty (so
+' the edit is saved to swap if the page is evicted), invalidates the cache
+' lines of that frame and refreshes the panel. A value that is not 1-2 hex
+' digits is rejected and the cell gets the real RAM value back.
+Public Sub OnMemoryCellEdit(ByVal Target As Range)
+    Dim ws As Worksheet, hit As Range, cel As Range
+    Dim pfn As Integer, idx As Integer, addr As Integer, owner As Integer
+    Dim txt As String, oldEv As Boolean, changed As Boolean
+    Set ws = ThisWorkbook.Worksheets(SH_MEM)
+    If editSel = 0 Then Exit Sub
+    Set hit = Intersect(Target, ws.Range(EDIT_RANGE))
+    If hit Is Nothing Then Exit Sub
+
+    pfn = editSel - 1
+    oldEv = Application.EnableEvents
+    Application.EnableEvents = False
+    On Error GoTo fail
+
+    For Each cel In hit.Cells
+        idx = (cel.row - EDIT_FIRST_ROW) * EDIT_COLS + (cel.Column - 1)
+        addr = pfn * PAGE_SIZE + idx
+        txt = Trim$(CStr(cel.value))
+        If IsHexByte(txt) Then
+            RAM(addr) = CInt(CLng("&H" & txt))
+            InvalidateFrame pfn
+            owner = FrameOwner(pfn)
+            If owner >= 0 Then PageTable(owner).Dirty = True
+            changed = True
+        Else
+            Debug.Print "OnMemoryCellEdit: '" & txt & "' is not a hex byte, value restored"
+        End If
+        cel.value = Right$("0" & Hex$(RAM(addr) And BYTE_MAX), 2)
+    Next cel
+
+    Application.EnableEvents = oldEv
+    If changed Then RefreshMemoryPanel
+    Exit Sub
+fail:
+    Application.EnableEvents = oldEv
+    Debug.Print "OnMemoryCellEdit error: " & Err.Description
+End Sub
+
 ' Repaints the panel from the current machine state:
 '  - frames 0..6: page that owns the frame (FrameOwner) + first bytes of RAM
 '    in the current view (HEX / BIN / DEC)
 '  - frame 7 keeps its fixed I/O text
 '  - cache boxes go back to grey and their HIT/MISS chips are cleared
 '  - the policy and format selectors match the current choices
+'  - the RAM editor grid shows the current bytes of its frame
 Public Sub RefreshMemoryPanel()
     Dim ws As Worksheet, i As Integer, k As Integer
     Dim owner As Integer, base As Integer, preview As String
@@ -300,6 +424,7 @@ Public Sub RefreshMemoryPanel()
 
     PaintPolicySelector ws
     PaintFormatSelector ws
+    RefreshEditGrid ws
 End Sub
 
 ' One cache box back to grey, its label chip empty
@@ -419,16 +544,16 @@ End Sub
 ' (target = "l1i_box" or "l1d_box"). Called by FillFromL2 in modCache.
 ' The boxes keep the colors that FlashCache gave them; only the token moves.
 ' Skipped when animations are off (AnimDelay <= 0) or a shape is missing.
-Public Sub UI_AnimateLineFill(ByVal idx As Integer, ByVal target As String)
+Public Sub UI_AnimateLineFill(ByVal idx As Integer, ByVal Target As String)
     Dim ws As Worksheet, tok As Shape, src As Shape, dst As Shape, k As Integer
     Dim x0 As Single, y0 As Single, x1 As Single, y1 As Single
     If AnimDelay <= 0 Then Exit Sub
     If idx < 0 Or idx >= L2_LINES Then Exit Sub
     Set ws = ThisWorkbook.Worksheets(SH_MEM)
     If Not HasShape(ws, "l2_line" & idx) Then Exit Sub
-    If Not HasShape(ws, target) Then Exit Sub
+    If Not HasShape(ws, Target) Then Exit Sub
     Set src = ws.Shapes("l2_line" & idx)
-    Set dst = ws.Shapes(target)
+    Set dst = ws.Shapes(Target)
 
     x0 = src.Left + (src.Width - TOKEN_W) / 2
     y0 = src.Top + (src.Height - TOKEN_H) / 2
@@ -845,3 +970,88 @@ Public Sub Test_ViewFormat()
 
     Debug.Print IIf(fails = 0, "Test_ViewFormat: ALL OK", "Test_ViewFormat: " & fails & " FAIL(S)")
 End Sub
+
+Public Sub Test_RamEdit()
+    Dim fails As Integer, ws As Worksheet, v As Integer
+    Dim oldPte5 As TPageEntry, oldPte6 As TPageEntry
+    Dim oldOwner2 As Integer, oldRam69 As Integer
+    Set ws = ThisWorkbook.Worksheets(SH_MEM)
+    BuildMemoryPanel
+
+    ' Save the state this test changes. Page 5 sits in frame 2, byte 5 of
+    ' that frame is RAM(69) (frame 2 starts at 64).
+    oldPte5 = PageTable(5)
+    oldPte6 = PageTable(6)
+    oldOwner2 = FrameOwner(2)
+    oldRam69 = RAM(69)
+    PageTable(5).Present = True
+    PageTable(5).pfn = 2
+    PageTable(5).Dirty = False
+    FrameOwner(2) = 5
+    RAM(69) = &H1A
+
+    ' 1) Click on the row of P5: the grid shows RAM(69) = 1A in F47 (byte 5)
+    OnPageTableClick ws.Range("A7")
+    If CStr(ws.Range("F47").value) <> "1A" Then fails = fails + 1: Debug.Print "  FAIL  1: F47 must show 1A, got: '" & CStr(ws.Range("F47").value) & "'"
+    If InStr(CStr(ws.Cells(EDIT_LABEL_ROW, 1).value), "F2") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: label must mention F2"
+
+    ' 2) Edit: type "ff" in F47. RAM changes, page is dirty, cell is normalized.
+    '    A cached copy of the old line must not survive (RAM(69) is in line 8..15 of frame 2).
+    InvalidateAllCaches
+    ResetStats
+    v = CacheReadL1D(69)
+    If v <> &H1A Then fails = fails + 1: Debug.Print "  FAIL  2: before the edit CacheReadL1D(69) = " & v & " (expected 26)"
+    Application.EnableEvents = False
+    ws.Range("F47").value = "ff"
+    Application.EnableEvents = True
+    OnMemoryCellEdit ws.Range("F47")
+    If RAM(69) <> 255 Then fails = fails + 1: Debug.Print "  FAIL  2: RAM(69) = " & RAM(69) & " (expected 255)"
+    If CStr(ws.Range("F47").value) <> "FF" Then fails = fails + 1: Debug.Print "  FAIL  2: F47 must be normalized to FF"
+    If Not PageTable(5).Dirty Then fails = fails + 1: Debug.Print "  FAIL  2: page 5 must be dirty after the edit"
+    v = CacheReadL1D(69)
+    If v <> 255 Then fails = fails + 1: Debug.Print "  FAIL  2: after the edit CacheReadL1D(69) = " & v & " (expected 255, stale cache?)"
+
+    ' 3) Invalid value: rejected, the cell gets the real value back
+    Application.EnableEvents = False
+    ws.Range("F47").value = "ZZ"
+    Application.EnableEvents = True
+    OnMemoryCellEdit ws.Range("F47")
+    If RAM(69) <> 255 Then fails = fails + 1: Debug.Print "  FAIL  3: RAM(69) must stay 255 after an invalid value"
+    If CStr(ws.Range("F47").value) <> "FF" Then fails = fails + 1: Debug.Print "  FAIL  3: F47 must go back to FF"
+
+    ' 4) One digit is valid: "7" -> 07
+    Application.EnableEvents = False
+    ws.Range("F47").value = "7"
+    Application.EnableEvents = True
+    OnMemoryCellEdit ws.Range("F47")
+    If RAM(69) <> 7 Then fails = fails + 1: Debug.Print "  FAIL  4: RAM(69) = " & RAM(69) & " (expected 7)"
+    If CStr(ws.Range("F47").value) <> "07" Then fails = fails + 1: Debug.Print "  FAIL  4: F47 must show 07"
+
+    ' 5) The frame preview of the panel follows the edit (byte 0 of frame 2 is not
+    '    the edited one, so only check the panel still shows P5)
+    If InStr(ws.Shapes(PFX_FRM & "2").TextFrame2.TextRange.Text, "P5") = 0 Then fails = fails + 1: Debug.Print "  FAIL  5: frm_2 must still show P5 after the refresh"
+
+    ' 6) Click on a page that is not in RAM: the grid is cleared
+    PageTable(6).Present = False
+    OnPageTableClick ws.Range("A8")
+    If CStr(ws.Range("F47").value) <> "" Then fails = fails + 1: Debug.Print "  FAIL  6: grid must be empty for a page that is not in RAM"
+
+    ' 7) With no frame selected an edit does nothing
+    Application.EnableEvents = False
+    ws.Range("F47").value = "AA"
+    Application.EnableEvents = True
+    OnMemoryCellEdit ws.Range("F47")
+    If RAM(69) <> 7 Then fails = fails + 1: Debug.Print "  FAIL  7: RAM(69) must not change when no frame is selected"
+
+    ' Cleanup: restore everything and redraw the panel (this also clears the grid)
+    RAM(69) = oldRam69
+    FrameOwner(2) = oldOwner2
+    PageTable(5) = oldPte5
+    PageTable(6) = oldPte6
+    InvalidateAllCaches
+    ResetStats
+    BuildMemoryPanel
+
+    Debug.Print IIf(fails = 0, "Test_RamEdit: ALL OK", "Test_RamEdit: " & fails & " FAIL(S)")
+End Sub
+
