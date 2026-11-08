@@ -173,8 +173,10 @@ Public Sub ISA_Detail(ByVal op As Integer, ByRef family As String, ByRef steps A
     cycles = 0
     If Not IsValidOpcode(op) Then Exit Sub
     ExecDetail op, family, ex, es, n
-    steps = "F1 PC->MAR | F2 M->MDR | F3 MDR->IR | F4 PC->MAR | F5 M->MDR | F6 MDR->IR | " & ex
-    sigs = "F En_PC Ld_MAR / Mem_R Ld_MDR / En_MDR Ld_IR Inc_PC (twice) | " & es
+    ' Fetch F1-F6 is the same for every instruction, so the cell shows
+    ' only the execute steps. Cycles still counts the six fetch steps.
+    steps = ex
+    sigs = es
     cycles = 6 + n
 End Sub
 
@@ -407,6 +409,7 @@ Public Sub BuildISASheet()
         .Font.Bold = True
     End With
     ws.Range("B3").Value = NUM_INSTRUCTIONS & " instructions, fixed 2-byte format. Registers: AX=0, BX=1, CX=2, DX=3."
+    ws.Range("B4").Value = "Cycles include F1-F6 fetch (PC->MAR, M->MDR, MDR->IR, twice). The columns below are only the execute steps."
 
     ' Instruction format
     ws.Range("B5").Value = "Instruction format"
@@ -443,9 +446,7 @@ Public Sub BuildISASheet()
                 Right$("0000" & IsaBin(op), 5))
             ws.Cells(r, 4).Interior.Color = ISA_FamilyColor(fam)
             If fam = "Control" Then ws.Cells(r, 4).Font.Color = CLR_TEXT
-            ws.Cells(r, 6).WrapText = True
-            ws.Cells(r, 7).WrapText = True
-            ws.Rows(r).RowHeight = 32
+            ws.Rows(r).RowHeight = 18
         End If
     Next op
     lastRow = r
