@@ -26,6 +26,15 @@ Private Const CLR_CLK_ON As Long = &H5AD8D8&     ' RGB(216,216,90) CLK pulse
 Private Const CLR_ISA_HL As Long = &HC8E8FF&     ' RGB(255,232,200) ISA row
 
 Private mPrevIsaRow As Long
+Private mPrevMicro As Integer
+Private mLastClock As Long
+Private histCw(1 To 8) As Long
+Private histN As Integer
+Private histAt As Integer
+
+Private Const CPU_FRAME_TOP As Single = 50
+Private Const CPU_FRAME_BOTTOM As Single = 394   ' frm_CPU top 50 + height 344
+Private Const IO_FRAME_TOP As Single = 406
 
 ' =====================================================================
 ' BuildCPUPanel - create every shape inside the CPU frame (frm_CPU).
@@ -37,13 +46,19 @@ Public Sub BuildCPUPanel(ByVal ws As Worksheet)
 
     On Error GoTo EH
     mPrevIsaRow = 0
+    mPrevMicro = 0
+    mLastClock = -1
+    histN = 0
+    histAt = 0
 
     ' Title + transfer (hierarchy: what is happening now)
-    AddBox ws, "lbl_CPUTitle", PANEL_L, PANEL_T, 160, 20, "CPU / BUSES", CLR_CHIP
-    AddBox ws, "lbl_Transfer", PANEL_L + 170, PANEL_T, 280, 20, "— idle —", CLR_CHIP
+    AddBox ws, "lbl_CPUTitle", PANEL_L, PANEL_T, 120, 18, "CPU / BUSES", CLR_CHIP
+    AddBox ws, "lbl_Transfer", PANEL_L + 128, PANEL_T, 220, 18, "idle", CLR_CHIP
+    AddBox ws, "phs_Now", PANEL_L + 356, PANEL_T, 78, 18, "FETCH", CLR_CHIP
+    BuildTimeline ws
 
     ' --- GP registers + buffers (left column) ---
-    y = PANEL_T + 28
+    y = PANEL_T + 44
     AddBox ws, "lbl_Regs", PANEL_L, y, 100, 16, "REGS", CLR_CHIP
     y = y + 18
     AddRegPair ws, "AX", PANEL_L, y: y = y + 34
@@ -53,7 +68,7 @@ Public Sub BuildCPUPanel(ByVal ws As Worksheet)
 
     ' --- Control regs (center) ---
     x = PANEL_L + 160
-    y = PANEL_T + 28
+    y = PANEL_T + 44
     AddBox ws, "lbl_CtrlRegs", x, y, 120, 16, "CONTROL", CLR_CHIP
     y = y + 18
     AddRegPair ws, "PC", x, y: y = y + 32
@@ -64,7 +79,7 @@ Public Sub BuildCPUPanel(ByVal ws As Worksheet)
 
     ' --- ALU + flags (right of control) ---
     x = PANEL_L + 340
-    y = PANEL_T + 28
+    y = PANEL_T + 44
     AddBox ws, "lbl_ALU", x, y, 100, 16, "ALU", CLR_CHIP
     y = y + 18
     AddRegPair ws, "TA", x, y: y = y + 32
@@ -78,7 +93,8 @@ Public Sub BuildCPUPanel(ByVal ws As Worksheet)
 
     ' --- I/O buffers on the data path ---
     x = PANEL_L + 500
-    y = PANEL_T + 46
+    y = PANEL_T + 62
+    BuildHistory ws
     AddBox ws, "lbl_IOBuf", x, y - 18, 100, 16, "I/O BUF", CLR_CHIP
     AddBox ws, PFX_BUF & "KBD", x, y, BUF_W + 30, BUF_H + 6, "KBD", CLR_HIGHZ
     AddBox ws, PFX_BUF & "LCD", x, y + 28, BUF_W + 30, BUF_H + 6, "LCD", CLR_HIGHZ
@@ -231,7 +247,7 @@ Public Sub RefreshCPUPanel()
     ElseIf Len(Bus.DataDriver) > 0 Then
         UI_SetText "lbl_Transfer", Bus.DataDriver & " → bus"
     Else
-        UI_SetText "lbl_Transfer", "— idle —"
+        UI_SetText "lbl_Transfer", "idle"
     End If
 
     ' Control word lights
@@ -266,6 +282,13 @@ Public Sub RefreshCPUPanel()
             mPrevIsaRow = row
         End If
     End If
+
+    On Error GoTo 0
+    NoteHistory
+    PaintPhase
+    PaintTimeline
+    PaintHistory
+    mPrevMicro = MicroStep
 
     ' Re-apply register text after fill changes
     PaintReg "AX", CPU.R(R_AX), False
@@ -324,6 +347,178 @@ Private Function ActiveReceiver(ByVal cw As Long) As String
     ActiveReceiver = ""
 End Function
 
+Private Sub BuildTimeline(ByVal ws As Worksheet)
+    Dim i As Integer
+    Dim x As Single
+    x = PANEL_L
+    For i = 1 To 6
+        AddBox ws, "tl_F" & i, x, 78, 26, 16, "F" & i, CLR_CHIP
+        x = x + 29
+    Next i
+    x = x + 8
+    For i = 1 To 3
+        AddBox ws, "tl_E" & i, x, 78, 26, 16, "E" & i, CLR_CHIP
+        x = x + 29
+    Next i
+End Sub
+
+Private Sub BuildHistory(ByVal ws As Worksheet)
+    Dim c As Integer
+    Dim s As Shape
+    AddBox ws, "lbl_Hist", 552, 244, 100, 12, "LAST 8", CLR_CHIP
+    For c = 1 To 8
+        Set s = UI_AddBox(ws, "hist_" & c, 552 + (c - 1) * 13, 258, 12, 96, ZeroBits(), CLR_CHIP)
+        s.TextFrame2.TextRange.Font.Size = 5
+        s.TextFrame2.TextRange.Font.Name = "Consolas"
+        s.TextFrame2.WordWrap = msoTrue
+    Next c
+End Sub
+
+Private Function ZeroBits() As String
+    Dim b As Integer
+    For b = 1 To NUM_SIGNALS
+        ZeroBits = ZeroBits & "0"
+    Next b
+End Function
+
+Private Sub NoteHistory()
+    If Clock = mLastClock Then Exit Sub
+    mLastClock = Clock
+    histAt = (histAt Mod 8) + 1
+    If histN < 8 Then histN = histN + 1
+    histCw(histAt) = Bus.Ctrl
+End Sub
+
+Private Sub CurrentPlace(ByRef phase As String, ByRef fetchNow As Integer, ByRef execNow As Integer)
+    phase = "FETCH"
+    fetchNow = 0
+    execNow = 0
+    If MicroStep > 7 Then
+        phase = "EXECUTE"
+        fetchNow = 6
+        execNow = MicroStep - 7
+    ElseIf MicroStep = 7 Then
+        phase = "DECODE"
+        fetchNow = 6
+    ElseIf MicroStep >= 2 And MicroStep <= 6 Then
+        phase = "FETCH"
+        fetchNow = MicroStep - 1
+    ElseIf MicroStep = 1 And mPrevMicro > 7 Then
+        phase = "EXECUTE"
+        fetchNow = 6
+        execNow = mPrevMicro - 6
+    End If
+End Sub
+
+Private Function ExecSlots() As Integer
+    Dim op As Integer, reg As Integer, operand As Integer
+    Dim fam As String, st As String, sg As String, cy As Integer
+    Decode CPU.IR, op, reg, operand
+    If Not IsValidOpcode(op) Then
+        ExecSlots = 1
+    Else
+        ISA_Detail op, fam, st, sg, cy
+        ExecSlots = cy - 6
+        If ExecSlots < 1 Then ExecSlots = 1
+        If ExecSlots > 3 Then ExecSlots = 3
+    End If
+End Function
+
+Private Sub PaintPhase()
+    Dim phase As String
+    Dim fetchNow As Integer
+    Dim execNow As Integer
+    Dim fill As Long
+    CurrentPlace phase, fetchNow, execNow
+    UI_SetText "phs_Now", phase
+    If phase = "EXECUTE" Then
+        fill = CLR_HIT
+    ElseIf phase = "DECODE" Then
+        fill = CLR_LOAD
+    Else
+        fill = CLR_ACTIVE
+    End If
+    UI_SetFill "phs_Now", fill
+End Sub
+
+Private Sub PaintTimeline()
+    Dim phase As String
+    Dim fetchNow As Integer
+    Dim execNow As Integer
+    Dim i As Integer
+    Dim nExec As Integer
+    CurrentPlace phase, fetchNow, execNow
+    nExec = ExecSlots()
+    For i = 1 To 6
+        PaintStep "tl_F" & i, i, fetchNow, True
+    Next i
+    For i = 1 To 3
+        If i <= nExec Then
+            PaintStep "tl_E" & i, i, execNow, (phase = "EXECUTE")
+        Else
+            UI_SetFill "tl_E" & i, CLR_CHIP
+        End If
+    Next i
+End Sub
+
+' kind = finished / current / waiting. During fetch the E chips are waiting.
+Private Sub PaintStep(ByVal nm As String, ByVal index As Integer, ByVal current As Integer, ByVal started As Boolean)
+    If Not started Or current = 0 Then
+        UI_SetFill nm, CLR_CHIP
+    ElseIf index < current Then
+        UI_SetFill nm, CLR_HIGHZ
+    ElseIf index = current Then
+        UI_SetFill nm, CLR_ACTIVE
+    Else
+        UI_SetFill nm, CLR_CHIP
+    End If
+End Sub
+
+Private Sub PaintHistory()
+    Dim showCol As Integer
+    Dim b As Integer
+    Dim slot As Integer
+    Dim cw As Long
+    Dim bit As Long
+    Dim s As Shape
+    Dim ch As String
+    Dim ws As Worksheet
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(SH_SIM)
+    On Error GoTo 0
+    If ws Is Nothing Then Exit Sub
+    For showCol = 1 To 8
+        cw = 0
+        If showCol > 8 - histN Then
+            slot = histAt - (8 - showCol)
+            Do While slot <= 0
+                slot = slot + 8
+            Loop
+            cw = histCw(slot)
+        End If
+        Set s = Nothing
+        On Error Resume Next
+        Set s = ws.Shapes("hist_" & showCol)
+        On Error GoTo 0
+        If Not s Is Nothing Then
+            For b = 0 To NUM_SIGNALS - 1
+                bit = CLng(2 ^ b)
+                If showCol <= 8 - histN Then
+                    ch = "0"
+                    s.TextFrame2.TextRange.Characters(b + 1, 1).Font.Fill.ForeColor.RGB = CLR_HIGHZ
+                ElseIf (cw And bit) <> 0 Then
+                    ch = "1"
+                    s.TextFrame2.TextRange.Characters(b + 1, 1).Font.Fill.ForeColor.RGB = CLR_ACTIVE
+                Else
+                    ch = "0"
+                    s.TextFrame2.TextRange.Characters(b + 1, 1).Font.Fill.ForeColor.RGB = CLR_HIGHZ
+                End If
+                s.TextFrame2.TextRange.Characters(b + 1, 1).Text = ch
+            Next b
+        End If
+    Next showCol
+End Sub
+
 ' =====================================================================
 ' Test_PanelCPU - shape presence + refresh paint smoke test
 ' =====================================================================
@@ -369,6 +564,29 @@ Public Function Test_PanelCPU() As Long
     fails = fails + PanCheck("driver coral path", True)  ' visual; logic already exercised
     fails = fails + PanCheck("CLK on", Bus.Clk)
 
+    fails = fails + PanCheck("timeline F1", ShapeExists(ws, "tl_F1"))
+    fails = fails + PanCheck("timeline E3", ShapeExists(ws, "tl_E3"))
+    fails = fails + PanCheck("phase chip", ShapeExists(ws, "phs_Now"))
+    fails = fails + PanCheck("history column", ShapeExists(ws, "hist_8"))
+    fails = fails + PanCheck("inside CPU frame", ShapeInsideCpu(ws, "tl_F1") And ShapeInsideCpu(ws, "phs_Now") And ShapeInsideCpu(ws, "hist_8") And ShapeInsideCpu(ws, PFX_SIG & "En_IR_D"))
+    fails = fails + PanCheck("above I/O frame", ShapeAboveIo(ws, "tl_F6") And ShapeAboveIo(ws, PFX_SIG & "CLK") And ShapeAboveIo(ws, "hist_1"))
+
+    MicroStep = 3
+    RefreshCPUPanel
+    fails = fails + PanCheck("F2 is the current fetch", ws.Shapes("tl_F2").Fill.ForeColor.RGB = CLR_ACTIVE)
+    fails = fails + PanCheck("F1 is already dim", ws.Shapes("tl_F1").Fill.ForeColor.RGB = CLR_HIGHZ)
+    fails = fails + PanCheck("F3 is still waiting", ws.Shapes("tl_F3").Fill.ForeColor.RGB = CLR_CHIP)
+    fails = fails + PanCheck("phase is FETCH", ws.Shapes("phs_Now").TextFrame2.TextRange.Text = "FETCH")
+
+    Clock = 1
+    Bus.Ctrl = SIG_EN_PC
+    RefreshCPUPanel
+    Clock = 2
+    Bus.Ctrl = SIG_EN_AX Or SIG_LD_TA
+    RefreshCPUPanel
+    fails = fails + PanCheck("newest column bit 0 is off", ws.Shapes("hist_8").TextFrame2.TextRange.Characters(1, 1).Font.Fill.ForeColor.RGB = CLR_HIGHZ)
+    fails = fails + PanCheck("newest column En_AX is on", ws.Shapes("hist_8").TextFrame2.TextRange.Characters(9, 1).Font.Fill.ForeColor.RGB = CLR_ACTIVE)
+
     ReleaseBuses
     Bus.Clk = False
     RefreshCPUPanel
@@ -376,6 +594,18 @@ Public Function Test_PanelCPU() As Long
     Debug.Print IIf(fails = 0, "Test_PanelCPU: ALL OK", "Test_PanelCPU: " & fails & " FAIL(S)")
     Test_PanelCPU = fails
     On Error GoTo 0
+End Function
+
+Private Function ShapeInsideCpu(ByVal ws As Worksheet, ByVal nm As String) As Boolean
+    Dim s As Shape
+    Set s = ws.Shapes(nm)
+    ShapeInsideCpu = (s.Top >= CPU_FRAME_TOP) And (s.Top + s.Height <= CPU_FRAME_BOTTOM) And (s.Left >= 20) And (s.Left + s.Width <= 660)
+End Function
+
+Private Function ShapeAboveIo(ByVal ws As Worksheet, ByVal nm As String) As Boolean
+    Dim s As Shape
+    Set s = ws.Shapes(nm)
+    ShapeAboveIo = (s.Top + s.Height <= IO_FRAME_TOP)
 End Function
 
 Private Function ShapeExists(ByVal ws As Worksheet, ByVal nm As String) As Boolean
