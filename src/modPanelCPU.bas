@@ -46,6 +46,7 @@ Public Sub BuildCPUPanel(ByVal ws As Worksheet)
     Dim s As Shape
 
     On Error GoTo EH
+    UI_ClearTransfer
     mPrevIsaRow = 0
     mPrevMicro = 0
     mLastClock = -1
@@ -92,18 +93,18 @@ Public Sub BuildCPUPanel(ByVal ws As Worksheet)
     AddBox ws, "flg_CF", x + 44, y, 40, 22, "CF 0", CLR_HIGHZ
     AddBox ws, "flg_SF", x + 88, y, 40, 22, "SF 0", CLR_HIGHZ
 
-    ' --- I/O buffers on the data path ---
-    x = PANEL_L + 500
+    ' --- I/O buffers: one even stack, clear of the history ---
+    x = PANEL_L + 470
     y = PANEL_T + 62
+    AddBox ws, "lbl_IOBuf", x, y - 18, 72, 16, "I/O BUF", CLR_CHIP
+    AddKey ws, PFX_BUF & "KBD", x, y, 72, 22, "KBD"
+    AddKey ws, PFX_BUF & "LCD", x, y + 26, 72, 22, "LCD"
+    AddKey ws, PFX_BUF & "MEM", x, y + 52, 72, 22, "MEM"
     BuildHistory ws
-    AddBox ws, "lbl_IOBuf", x, y - 18, 100, 16, "I/O BUF", CLR_CHIP
-    AddBox ws, PFX_BUF & "KBD", x, y, BUF_W + 30, BUF_H + 6, "KBD", CLR_HIGHZ
-    AddBox ws, PFX_BUF & "LCD", x, y + 28, BUF_W + 30, BUF_H + 6, "LCD", CLR_HIGHZ
-    AddBox ws, PFX_BUF & "MEM", x, y + 56, BUF_W + 30, BUF_H + 6, "MEM", CLR_HIGHZ
 
-    ' --- Buses. Value on the left. The wire stops before the history. ---
-    y = PANEL_T + 220
-    AddBox ws, "lbl_Buses", PANEL_L, y, 240, 14, "BUSES    INT 9-bit     EXT 8-bit", CLR_CHIP
+    ' --- Buses. Label, then a full horizontal wire the arrow can follow. ---
+    y = PANEL_T + 216
+    AddBox ws, "lbl_Buses", PANEL_L, y, 250, 12, "BUSES    INT 9-bit     EXT 8-bit", CLR_CHIP
     y = y + 14
     AddBusRow ws, "val_INT_ADDR", "INT HiZ", PFX_WIRE & "INT_ADDR", y
     y = y + 14
@@ -113,24 +114,18 @@ Public Sub BuildCPUPanel(ByVal ws As Worksheet)
     y = y + 14
     AddBusRow ws, "val_DATA", "D HiZ", PFX_WIRE & "DATA", y
 
-    ' --- Control word. Named lights, two rows, under the history columns. ---
-    y = PANEL_T + 292
-    AddBox ws, "lbl_CW", PANEL_L, y, 160, 14, "CONTROL WORD", CLR_CHIP
-    AddBox ws, PFX_SIG & "CLK", PANEL_L + 400, y, 72, 14, "CLK", CLR_HIGHZ
+    ' --- Control word. Two even rows, inset from the frame edge. ---
+    y = PANEL_T + 286
+    AddBox ws, "lbl_CW", PANEL_L, y, 170, 12, "CONTROL WORD", CLR_CHIP
     y = y + 14
     For i = 0 To NUM_SIGNALS - 1
         nm = SignalName(i)
         If Len(nm) > 0 Then
-            x = PANEL_L + (i Mod 14) * (SIG_W + 3)
-            Set s = UI_AddBox(ws, PFX_SIG & nm, x, y + (i \ 14) * (SIG_H + 1), SIG_W, SIG_H, ShortSig(nm), CLR_HIGHZ)
-            s.TextFrame2.MarginLeft = 0
-            s.TextFrame2.MarginRight = 0
-            s.TextFrame2.MarginTop = 0
-            s.TextFrame2.MarginBottom = 0
-            s.TextFrame2.TextRange.Font.Size = 8
-            s.TextFrame2.TextRange.Font.Name = "Consolas"
+            x = PANEL_L + 8 + (i Mod 14) * 38
+            Set s = AddKey(ws, PFX_SIG & nm, x, y + (i \ 14) * 14, 36, 12, ShortSig(nm))
         End If
     Next i
+    AddKey ws, PFX_SIG & "CLK", PANEL_L + 8 + 13 * 38, y + 14, 36, 12, "CLK"
 
     RefreshCPUPanel
     Exit Sub
@@ -154,10 +149,26 @@ Private Sub AddBox(ByVal ws As Worksheet, ByVal nm As String, ByVal l As Single,
     On Error GoTo 0
 End Sub
 
+Private Function AddKey(ByVal ws As Worksheet, ByVal nm As String, ByVal l As Single, _
+        ByVal t As Single, ByVal w As Single, ByVal h As Single, ByVal txt As String) As Shape
+    Dim s As Shape
+    Set s = UI_AddBox(ws, nm, l, t, w, h, txt, CLR_HIGHZ)
+    s.TextFrame2.MarginLeft = 0
+    s.TextFrame2.MarginRight = 0
+    s.TextFrame2.MarginTop = 0
+    s.TextFrame2.MarginBottom = 0
+    s.TextFrame2.TextRange.Font.Size = 8
+    s.TextFrame2.TextRange.Font.Name = "Consolas"
+    s.Line.Visible = msoTrue
+    s.Line.ForeColor.RGB = CLR_BG
+    s.Line.Weight = 1.25
+    Set AddKey = s
+End Function
+
 Private Sub AddBusRow(ByVal ws As Worksheet, ByVal valName As String, _
         ByVal caption As String, ByVal wireName As String, ByVal y As Single)
-    AddBox ws, valName, PANEL_L, y, 78, 14, caption, CLR_CHIP
-    UI_AddWire ws, wireName, PANEL_L + 86, y + 7, 536, y + 7, 3
+    AddBox ws, valName, PANEL_L, y, 74, 12, caption, CLR_CHIP
+    UI_AddWire ws, wireName, PANEL_L + 82, y + 6, PANEL_L + 590, y + 6, 2.5
 End Sub
 
 Private Function ShortSig(ByVal nm As String) As String
@@ -233,7 +244,11 @@ Public Sub RefreshCPUPanel()
     bufs = Array("AX", "BX", "CX", "DX", "PC", "IR", "MAR", "MDR", "PADDR", "TA", "TB", "ALU", "KBD", "LCD", "MEM")
     For i = LBound(bufs) To UBound(bufs)
         UI_SetFill PFX_BUF & CStr(bufs(i)), CLR_HIGHZ
-        UI_SetText PFX_BUF & CStr(bufs(i)), "Z"
+        If CStr(bufs(i)) = "KBD" Or CStr(bufs(i)) = "LCD" Or CStr(bufs(i)) = "MEM" Then
+            UI_SetText PFX_BUF & CStr(bufs(i)), CStr(bufs(i))
+        Else
+            UI_SetText PFX_BUF & CStr(bufs(i)), "Z"
+        End If
         UI_SetFill PFX_REG & CStr(bufs(i)), CLR_HIGHZ
     Next i
     UI_SetHighZ PFX_WIRE & "INT_ADDR"
@@ -261,7 +276,11 @@ Public Sub RefreshCPUPanel()
     ' Active data driver (coral) + wire
     If Len(Bus.DataDriver) > 0 And Bus.Data <> HIGH_Z Then
         UI_Highlight PFX_BUF & Bus.DataDriver, CLR_ACTIVE
-        UI_SetText PFX_BUF & Bus.DataDriver, ">"
+        If Bus.DataDriver = "KBD" Or Bus.DataDriver = "LCD" Or Bus.DataDriver = "MEM" Then
+            UI_SetText PFX_BUF & Bus.DataDriver, Bus.DataDriver
+        Else
+            UI_SetText PFX_BUF & Bus.DataDriver, ">"
+        End If
         If Bus.Internal Then
             UI_Highlight PFX_WIRE & "INT_DATA", CLR_ACTIVE
         Else
@@ -402,9 +421,12 @@ End Sub
 Private Sub BuildHistory(ByVal ws As Worksheet)
     Dim c As Integer
     Dim s As Shape
-    AddBox ws, "lbl_Hist", 556, 248, 90, 12, "LAST 8", CLR_CHIP
+    AddBox ws, "lbl_Hist", 578, 200, 72, 12, "LAST 8", CLR_CHIP
     For c = 1 To 8
-        Set s = UI_AddBox(ws, "hist_" & c, 556 + (c - 1) * 12, 262, 10, 84, ZeroBits(), CLR_CHIP)
+        Set s = UI_AddBox(ws, "hist_" & c, 578 + (c - 1) * 10, 214, 8, 60, ZeroBits(), CLR_CHIP)
+        s.Line.Visible = msoTrue
+        s.Line.ForeColor.RGB = CLR_BG
+        s.Line.Weight = 0.75
         s.TextFrame2.TextRange.Font.Size = 5
         s.TextFrame2.TextRange.Font.Name = "Consolas"
         s.TextFrame2.WordWrap = msoTrue
