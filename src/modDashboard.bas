@@ -396,6 +396,7 @@ Public Sub BtnReset()
     If RunFlag Then BlockWhileRunning "btn_Reset": Exit Sub
     ResetMachine
     ResetControlUnit
+    ClearLogSheet
     LogClear
     RefreshAll
 End Sub
@@ -480,6 +481,7 @@ Public Sub RefreshAll()
     On Error Resume Next
     RefreshCPUPanel          ' A9
     RefreshMemoryPanel       ' K10
+    RefreshPageTableView     ' K3
     RefreshStats             ' K9
     RefreshKeyboard          ' M5
     RefreshLCD               ' M6

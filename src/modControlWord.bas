@@ -217,8 +217,10 @@ Public Sub PaintControlWordOnISA()
     On Error Resume Next
     ws.Shapes("btn_ForceCollision").Delete
     On Error GoTo 0
-    Set btn = UI_AddBox(ws, "btn_ForceCollision", 20, 10, 160, 28, "FORCE COLLISION", CLR_MISS)
-    btn.OnAction = "Demo_ForceCollision"
+    ' Sit on the title row, to the right of the heading, so it does not cover the lines under it.
+    ws.Rows(2).RowHeight = 32
+    Set btn = UI_AddBox(ws, "btn_ForceCollision", 460, ws.Rows(2).Top + 3, 168, 26, "FORCE COLLISION", CLR_MISS)
+    btn.OnAction = "'" & ThisWorkbook.Name & "'!Demo_ForceCollision"
 
     Application.ScreenUpdating = True
     Debug.Print "PaintControlWordOnISA: OK"

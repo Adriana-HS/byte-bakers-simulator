@@ -164,6 +164,7 @@ Public Sub BuildMemoryPanel()
     ' RAM editor grid: no frame selected yet
     editSel = 0
     RefreshEditGrid ws
+    RefreshPageTableView
 End Sub
 
 ' A cache box plus its label chip underneath (lbl_<name>)
@@ -1464,6 +1465,8 @@ Clean:
     Application.EnableEvents = oldEv
     RefreshPageTableView
     BuildMemoryPanel
+    ResetMachine
+    RefreshPageTableView
     RefreshMemoryPanel
     On Error GoTo 0
     If fails = 0 Then
