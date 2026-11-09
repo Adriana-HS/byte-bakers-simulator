@@ -73,6 +73,22 @@ Private Sub EnsureStatsTable(ByVal ws As Worksheet)
     ws.Cells(STATS_HDR_ROW + 2, STATS_COL).value = "L1D"
     ws.Cells(STATS_HDR_ROW + 3, STATS_COL).value = "L2"
     ws.Cells(STATS_HDR_ROW + 4, STATS_COL).value = "Page Faults"
+    ' Header in navy with cream bold text
+    With ws.Range(ws.Cells(STATS_HDR_ROW, STATS_COL), ws.Cells(STATS_HDR_ROW, STATS_COL + 1))
+        .Interior.Color = CLR_BG
+        .Font.Color = CLR_TEXT
+    End With
+    ' Body in cream with ink
+    With ws.Range(ws.Cells(STATS_HDR_ROW + 1, STATS_COL), ws.Cells(STATS_HDR_ROW + 4, STATS_COL + 1))
+        .Interior.Color = CLR_TEXT
+        .Font.Color = CLR_INK
+    End With
+    ' Borders
+    With ws.Range(ws.Cells(STATS_HDR_ROW, STATS_COL), ws.Cells(STATS_HDR_ROW + 4, STATS_COL + 1)).Borders
+        .LineStyle = xlContinuous
+        .Weight = xlThin
+        .Color = CLR_BORDER
+    End With
 End Sub
 
 ' Creates the bar shape on first use (name = bar_<key>)

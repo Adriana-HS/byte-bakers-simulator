@@ -71,9 +71,9 @@ Private Const TOKEN_STEPS As Integer = 12
 Private Const PT_FIRST_ROW As Long = 2      ' page table: VPN 0 is on row 2
 Private Const SWAP_FIRST_ROW As Long = 2    ' swap grid: P0 is on row 2
 Private Const SWAP_FIRST_COL As Long = 9    ' swap grid: first byte is column I
-Private Const BOX_W As Single = 78
-Private Const STEP_X As Single = 84
-Private Const FRAME_H As Single = 50
+Private Const BOX_W As Single = 86
+Private Const STEP_X As Single = 92
+Private Const FRAME_H As Single = 54
 Private Const CACHE_H As Single = 36
 Private Const CHIP_H As Single = 16
 Private Const PREVIEW_BYTES As Integer = 3
@@ -117,7 +117,7 @@ Private lastEditIdx As Integer
 ' Draws (or redraws) the whole panel. Safe to call many times:
 ' UI_AddBox deletes a shape with the same name before creating it.
 Public Sub BuildMemoryPanel()
-    Dim ws As Worksheet, i As Integer
+    Dim ws As Worksheet, i As Integer, frm As Shape
     Dim leftX As Single, topY As Single, cacheY As Single
     Set ws = ThisWorkbook.Worksheets(SH_MEM)
     leftX = ws.Cells(1, 1).Left + 8
@@ -130,12 +130,16 @@ Public Sub BuildMemoryPanel()
     ' RAM frames 0..7 (frame 7 belongs to the I/O page, always pinned)
     For i = 0 To NUM_FRAMES - 1
         If i = IO_FRAME Then
-            UI_AddBox ws, PFX_FRM & i, leftX + i * STEP_X, topY, BOX_W, FRAME_H, _
-                "F" & i & vbLf & "I/O (P" & IO_VPAGE & ")"
+            Set frm = UI_AddBox(ws, PFX_FRM & i, leftX + i * STEP_X, topY, BOX_W, FRAME_H, _
+                "F" & i & vbLf & "I/O (P" & IO_VPAGE & ")")
         Else
-            UI_AddBox ws, PFX_FRM & i, leftX + i * STEP_X, topY, BOX_W, FRAME_H, _
-                "F" & i & vbLf & "free"
+            Set frm = UI_AddBox(ws, PFX_FRM & i, leftX + i * STEP_X, topY, BOX_W, FRAME_H, _
+                "F" & i & vbLf & "free")
         End If
+        With frm.TextFrame2
+            .MarginLeft = 2: .MarginRight = 2: .MarginTop = 2: .MarginBottom = 2
+            .WordWrap = msoFalse
+        End With
     Next i
 
     ' L1I and L1D
