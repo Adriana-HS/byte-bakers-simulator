@@ -191,6 +191,8 @@ Public Sub LoadEditor()
     ClearVMem
     VMemWriteBlock 0, bytes
     ResetMachine
+    ResetControlUnit
+    LogClear
     DemandPaging
     RefreshAll
     ThisWorkbook.Worksheets(SH_SIM).Activate

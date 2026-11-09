@@ -395,6 +395,8 @@ End Sub
 Public Sub BtnReset()
     If RunFlag Then BlockWhileRunning "btn_Reset": Exit Sub
     ResetMachine
+    ResetControlUnit
+    LogClear
     RefreshAll
 End Sub
 

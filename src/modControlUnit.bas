@@ -300,8 +300,6 @@ Private Function DoExecute(ByVal t As Integer) As Boolean
 
         Case OP_IN
             r = IoRead(curReg)
-            Emit SIG_IO_R Or SIG_EN_KBD Or SIG_LD_REG(curReg), "KBD -> " & RegName(curReg)
-            DriveDataBus "KBD", r, False
             SetReg curReg, r
             DoExecute = True
 

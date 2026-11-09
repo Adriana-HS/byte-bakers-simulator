@@ -39,10 +39,7 @@ Public Sub IoWrite(ByVal v As Integer)
     Dim cw As Long
     v = v And &HFF&
     cw = SIG_EN_AX Or SIG_IO_W Or SIG_LD_LCD
-    Publish cw
-    CPU.R(R_AX) = v
-    DriveDataBus "AX", v, False
-    UI_AnimateTransfer PFX_REG & "AX", PFX_BUF & "LCD", PFX_WIRE & "DATA", IoGlyph(v)
+    mLastCW = cw
     LcdWrite v
     RefreshCPUPanel
 End Sub
