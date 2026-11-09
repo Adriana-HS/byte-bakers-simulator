@@ -104,9 +104,15 @@ Private hlActive As Boolean
 ' Piece 6c: number format of the bytes in the frames (FMT_HEX by default)
 Private viewFmt As Integer
 
-' Piece 7: frame shown in the RAM editor. 0 = none, otherwise pfn + 1
+' Frame shown in the RAM editor. 0 = none, otherwise pfn + 1
 ' (so the default value 0 of a fresh module means "no frame").
 Private editSel As Integer
+
+' Last accepted RAM-editor write. Painted coral again after every grid refill.
+' Replaced by the next accepted edit. Dropped when the grid is cleared.
+Private lastEditOn As Boolean
+Private lastEditPfn As Integer
+Private lastEditIdx As Integer
 
 ' Draws (or redraws) the whole panel. Safe to call many times:
 ' UI_AddBox deletes a shape with the same name before creating it.
@@ -392,7 +398,8 @@ End Sub
 
 ' Fills (or clears) the grid A47:H50 with the 32 bytes of the selected
 ' frame, always in hex, two digits per cell. Writes with events off so
-' Worksheet_Change does not fire.
+' Worksheet_Change does not fire. The last accepted edit is painted coral
+' again here, because this refill replaces the previous cell fill.
 Private Sub RefreshEditGrid(ByVal ws As Worksheet)
     Dim oldEv As Boolean, idx As Integer, base As Integer, owner As Integer
     oldEv = Application.EnableEvents
@@ -407,8 +414,10 @@ Private Sub RefreshEditGrid(ByVal ws As Worksheet)
         .Font.Name = "Consolas"
         .Borders.LineStyle = xlContinuous
     End With
+    ClearEditorChrome ws
 
     If editSel = 0 Then
+        lastEditOn = False
         ws.Range(EDIT_RANGE).ClearContents
         ws.Cells(EDIT_LABEL_ROW, 1).value = "Click a page in the table (A2:E17) to load its frame here"
     Else
@@ -425,11 +434,36 @@ Private Sub RefreshEditGrid(ByVal ws As Worksheet)
             Next idx
         End If
     End If
+    PaintLastEditedByte ws
     Application.EnableEvents = oldEv
     Exit Sub
 fail:
     Application.EnableEvents = oldEv
     Debug.Print "RefreshEditGrid error: " & Err.description
+End Sub
+
+' Drop any previous coral fill on A47:H50. Does not change the border.
+Private Sub ClearEditorChrome(ByVal ws As Worksheet)
+    Dim cel As Range
+    For Each cel In ws.Range(EDIT_RANGE).Cells
+        cel.Interior.Pattern = xlNone
+        cel.Font.ColorIndex = xlAutomatic
+    Next cel
+End Sub
+
+' Coral on the last accepted byte, only while that frame is still in the grid.
+Private Sub PaintLastEditedByte(ByVal ws As Worksheet)
+    Dim cel As Range
+    Dim pfn As Integer
+    If Not lastEditOn Then Exit Sub
+    If editSel = 0 Then Exit Sub
+    pfn = editSel - 1
+    If pfn <> lastEditPfn Then Exit Sub
+    If FrameOwner(pfn) < 0 Then Exit Sub
+    If lastEditIdx < 0 Or lastEditIdx >= PAGE_SIZE Then Exit Sub
+    Set cel = ws.Cells(EDIT_FIRST_ROW + lastEditIdx \ EDIT_COLS, 1 + (lastEditIdx Mod EDIT_COLS))
+    cel.Interior.Color = CLR_ACTIVE
+    cel.Font.Color = UI_InkFor(CLR_ACTIVE)
 End Sub
 
 ' True if txt is 1 or 2 hex digits
@@ -470,7 +504,12 @@ Public Sub OnMemoryCellEdit(ByVal Target As Range)
             RAM(addr) = CInt(CLng("&H" & txt))
             InvalidateFrame pfn
             owner = FrameOwner(pfn)
-            If owner >= 0 Then PageTable(owner).Dirty = True
+            If owner >= 0 Then
+                PageTable(owner).Dirty = True
+            End If
+            lastEditPfn = pfn
+            lastEditIdx = idx
+            lastEditOn = True
             changed = True
         Else
             Debug.Print "OnMemoryCellEdit: '" & txt & "' is not a hex byte, value restored"
@@ -703,7 +742,6 @@ Public Sub Demo_LineFillAnim()
     v = CacheReadL1I(1)     ' same line, L2 hit, line comes up to L1I
     AnimDelay = oldDelay
 End Sub
-
 ' ---------- TESTS ----------
 
 Private Function HasShape(ByVal ws As Worksheet, ByVal nm As String) As Boolean
@@ -738,11 +776,11 @@ Public Sub Test_BuildMemoryPanel()
     ResetStats
     v = CacheReadL1I(0)                  ' L1I miss and L2 miss
     If ws.Shapes("l1i_box").fill.ForeColor.RGB <> CLR_MISS Then fails = fails + 1: Debug.Print "  FAIL  2: l1i_box must be red after a miss"
-    If ws.Shapes("lbl_l1i_box").TextFrame2.TextRange.Text <> "MISS" Then fails = fails + 1: Debug.Print "  FAIL  2: lbl_l1i_box must say MISS"
+    If ws.Shapes("lbl_l1i_box").TextFrame2.TextRange.text <> "MISS" Then fails = fails + 1: Debug.Print "  FAIL  2: lbl_l1i_box must say MISS"
     If ws.Shapes("l2_line0").fill.ForeColor.RGB <> CLR_MISS Then fails = fails + 1: Debug.Print "  FAIL  2: l2_line0 must be red (L2 miss)"
     v = CacheReadL1I(1)                  ' same line: L1I hit
     If ws.Shapes("l1i_box").fill.ForeColor.RGB <> CLR_HIT Then fails = fails + 1: Debug.Print "  FAIL  2: l1i_box must be green after a hit"
-    If ws.Shapes("lbl_l1i_box").TextFrame2.TextRange.Text <> "HIT" Then fails = fails + 1: Debug.Print "  FAIL  2: lbl_l1i_box must say HIT"
+    If ws.Shapes("lbl_l1i_box").TextFrame2.TextRange.text <> "HIT" Then fails = fails + 1: Debug.Print "  FAIL  2: lbl_l1i_box must say HIT"
 
     ' Cleanup: caches empty, counters at 0, panel redrawn in grey
     InvalidateAllCaches
@@ -770,7 +808,7 @@ Public Sub Test_RefreshMemoryPanel()
     FrameOwner(0) = 3
     RAM(0) = &H1A: RAM(1) = &HFF: RAM(2) = &H5
     RefreshMemoryPanel
-    t = ws.Shapes(PFX_FRM & "0").TextFrame2.TextRange.Text
+    t = ws.Shapes(PFX_FRM & "0").TextFrame2.TextRange.text
     If InStr(t, "P3") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: frm_0 must show P3, got: " & Replace(t, vbLf, "/")
     If InStr(t, "1A FF 05") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: frm_0 must show bytes 1A FF 05, got: " & Replace(t, vbLf, "/")
     If ws.Shapes(PFX_FRM & "0").fill.ForeColor.RGB <> CLR_LOAD Then fails = fails + 1: Debug.Print "  FAIL  1: occupied frame must use CLR_LOAD"
@@ -778,12 +816,12 @@ Public Sub Test_RefreshMemoryPanel()
     ' 2) Frame 0 free again
     FrameOwner(0) = -1
     RefreshMemoryPanel
-    t = ws.Shapes(PFX_FRM & "0").TextFrame2.TextRange.Text
+    t = ws.Shapes(PFX_FRM & "0").TextFrame2.TextRange.text
     If InStr(t, "free") = 0 Then fails = fails + 1: Debug.Print "  FAIL  2: frm_0 must say free, got: " & Replace(t, vbLf, "/")
     If ws.Shapes(PFX_FRM & "0").fill.ForeColor.RGB <> CLR_HIGHZ Then fails = fails + 1: Debug.Print "  FAIL  2: free frame must be grey"
 
     ' 3) Frame 7 keeps its I/O text
-    t = ws.Shapes(PFX_FRM & IO_FRAME).TextFrame2.TextRange.Text
+    t = ws.Shapes(PFX_FRM & IO_FRAME).TextFrame2.TextRange.text
     If InStr(t, "I/O") = 0 Then fails = fails + 1: Debug.Print "  FAIL  3: frm_7 must keep I/O text"
 
     ' 4) Cache boxes painted by an animation go back to grey and the chip is cleared
@@ -793,9 +831,9 @@ Public Sub Test_RefreshMemoryPanel()
     UI_SetText "lbl_l2_line2", "HIT"
     RefreshMemoryPanel
     If ws.Shapes("l1i_box").fill.ForeColor.RGB <> CLR_HIGHZ Then fails = fails + 1: Debug.Print "  FAIL  4: l1i_box must be grey after refresh"
-    If ws.Shapes("lbl_l1i_box").TextFrame2.TextRange.Text <> "" Then fails = fails + 1: Debug.Print "  FAIL  4: lbl_l1i_box must be empty after refresh"
+    If ws.Shapes("lbl_l1i_box").TextFrame2.TextRange.text <> "" Then fails = fails + 1: Debug.Print "  FAIL  4: lbl_l1i_box must be empty after refresh"
     If ws.Shapes("l2_line2").fill.ForeColor.RGB <> CLR_HIGHZ Then fails = fails + 1: Debug.Print "  FAIL  4: l2_line2 must be grey after refresh"
-    If ws.Shapes("lbl_l2_line2").TextFrame2.TextRange.Text <> "" Then fails = fails + 1: Debug.Print "  FAIL  4: lbl_l2_line2 must be empty after refresh"
+    If ws.Shapes("lbl_l2_line2").TextFrame2.TextRange.text <> "" Then fails = fails + 1: Debug.Print "  FAIL  4: lbl_l2_line2 must be empty after refresh"
 
     ' Cleanup: restore the state and leave the panel as the machine has it
     FrameOwner(0) = oldOwner
@@ -819,7 +857,7 @@ Public Sub Test_ShowTranslation()
     PageTable(5).Present = True
     PageTable(5).pfn = 2
     ShowTranslation 5, 5
-    t = ws.Shapes(XLT_NAME).TextFrame2.TextRange.Text
+    t = ws.Shapes(XLT_NAME).TextFrame2.TextRange.text
     If InStr(t, "0x0A5") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: must show vaddr 0x0A5, got: " & Replace(t, vbLf, "/")
     If InStr(t, "VPN 5") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: must show VPN 5, got: " & Replace(t, vbLf, "/")
     If InStr(t, "0101") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: must show VPN in binary 0101, got: " & Replace(t, vbLf, "/")
@@ -830,7 +868,7 @@ Public Sub Test_ShowTranslation()
     ' 2) Page 5 not present: PAGE FAULT in red
     PageTable(5).Present = False
     ShowTranslation 5, 5
-    t = ws.Shapes(XLT_NAME).TextFrame2.TextRange.Text
+    t = ws.Shapes(XLT_NAME).TextFrame2.TextRange.text
     If InStr(t, "PAGE FAULT") = 0 Then fails = fails + 1: Debug.Print "  FAIL  2: must say PAGE FAULT, got: " & Replace(t, vbLf, "/")
     If ws.Shapes(XLT_NAME).fill.ForeColor.RGB <> CLR_FAULT Then fails = fails + 1: Debug.Print "  FAIL  2: fault must be CLR_FAULT"
 
@@ -865,15 +903,15 @@ Public Sub Test_PageFaultAnim()
 
     ' 2) The swap-in leaves frame 2 coral with "P5" and no token behind
     UI_AnimateSwapIn 5, 2
-    t = ws.Shapes(PFX_FRM & "2").TextFrame2.TextRange.Text
+    t = ws.Shapes(PFX_FRM & "2").TextFrame2.TextRange.text
     If InStr(t, "P5") = 0 Then fails = fails + 1: Debug.Print "  FAIL  2: frm_2 must show P5, got: " & Replace(t, vbLf, "/")
     If ws.Shapes(PFX_FRM & "2").fill.ForeColor.RGB <> CLR_ACTIVE Then fails = fails + 1: Debug.Print "  FAIL  2: frm_2 must be coral (CLR_ACTIVE)"
     If HasShape(ws, TOKEN_NAME) Then fails = fails + 1: Debug.Print "  FAIL  2: the token must be deleted after the animation"
 
     ' 3) Frame 7 (I/O) is never touched
-    t = ws.Shapes(PFX_FRM & IO_FRAME).TextFrame2.TextRange.Text
+    t = ws.Shapes(PFX_FRM & IO_FRAME).TextFrame2.TextRange.text
     UI_AnimateSwapIn 5, IO_FRAME
-    If ws.Shapes(PFX_FRM & IO_FRAME).TextFrame2.TextRange.Text <> t Then fails = fails + 1: Debug.Print "  FAIL  3: frm_7 must not change"
+    If ws.Shapes(PFX_FRM & IO_FRAME).TextFrame2.TextRange.text <> t Then fails = fails + 1: Debug.Print "  FAIL  3: frm_7 must not change"
 
     ' Cleanup
     AnimDelay = oldDelay
@@ -988,7 +1026,7 @@ Public Sub Test_PageTableClick()
     OnPageTableClick ws.Range("A7")
     If ws.Shapes(PFX_FRM & "2").line.weight <> HL_WEIGHT Then fails = fails + 1: Debug.Print "  FAIL  1: frm_2 must have the thick outline"
     If ws.Shapes(PFX_FRM & "3").line.weight = HL_WEIGHT Then fails = fails + 1: Debug.Print "  FAIL  1: frm_3 must not be outlined"
-    t = ws.Shapes(XLT_NAME).TextFrame2.TextRange.Text
+    t = ws.Shapes(XLT_NAME).TextFrame2.TextRange.text
     If InStr(t, "VPN 5") = 0 Or InStr(t, "PFN 2") = 0 Then fails = fails + 1: Debug.Print "  FAIL  1: strip must show VPN 5 -> PFN 2, got: " & Replace(t, vbLf, "/")
 
     ' 2) A click outside the page table does nothing
@@ -999,7 +1037,7 @@ Public Sub Test_PageTableClick()
     PageTable(6).Present = False
     OnPageTableClick ws.Range("C8")
     If ws.Shapes(PFX_FRM & "2").line.weight = HL_WEIGHT Then fails = fails + 1: Debug.Print "  FAIL  3: frm_2 must lose its outline"
-    t = ws.Shapes(XLT_NAME).TextFrame2.TextRange.Text
+    t = ws.Shapes(XLT_NAME).TextFrame2.TextRange.text
     If InStr(t, "PAGE FAULT") = 0 Then fails = fails + 1: Debug.Print "  FAIL  3: strip must say PAGE FAULT, got: " & Replace(t, vbLf, "/")
 
     ' 4) Page 15 (I/O) outlines frame 7. The test sets the entry itself,
@@ -1045,26 +1083,26 @@ Public Sub Test_ViewFormat()
 
     ' 2) HEX: three bytes
     SetViewHex
-    t = ws.Shapes(PFX_FRM & "0").TextFrame2.TextRange.Text
+    t = ws.Shapes(PFX_FRM & "0").TextFrame2.TextRange.text
     If InStr(t, "1A FF 05") = 0 Then fails = fails + 1: Debug.Print "  FAIL  2: HEX must show 1A FF 05, got: " & Replace(t, vbLf, "/")
     If ws.Shapes(FMT_HEX_NAME).fill.ForeColor.RGB <> CLR_LOAD Then fails = fails + 1: Debug.Print "  FAIL  2: fmt_hex must be amber"
     If ws.Shapes(FMT_BIN_NAME).fill.ForeColor.RGB <> CLR_HIGHZ Then fails = fails + 1: Debug.Print "  FAIL  2: fmt_bin must be grey"
 
     ' 3) BIN: two bytes, 8 bits each
     SetViewBin
-    t = ws.Shapes(PFX_FRM & "0").TextFrame2.TextRange.Text
+    t = ws.Shapes(PFX_FRM & "0").TextFrame2.TextRange.text
     If InStr(t, "00011010 11111111") = 0 Then fails = fails + 1: Debug.Print "  FAIL  3: BIN must show 00011010 11111111, got: " & Replace(t, vbLf, "/")
     If ws.Shapes(FMT_BIN_NAME).fill.ForeColor.RGB <> CLR_LOAD Then fails = fails + 1: Debug.Print "  FAIL  3: fmt_bin must be amber"
     If ws.Shapes(FMT_HEX_NAME).fill.ForeColor.RGB <> CLR_HIGHZ Then fails = fails + 1: Debug.Print "  FAIL  3: fmt_hex must be grey"
 
     ' 4) DEC: two bytes
     SetViewDec
-    t = ws.Shapes(PFX_FRM & "0").TextFrame2.TextRange.Text
+    t = ws.Shapes(PFX_FRM & "0").TextFrame2.TextRange.text
     If InStr(t, "26 255") = 0 Then fails = fails + 1: Debug.Print "  FAIL  4: DEC must show 26 255, got: " & Replace(t, vbLf, "/")
     If ws.Shapes(FMT_DEC_NAME).fill.ForeColor.RGB <> CLR_LOAD Then fails = fails + 1: Debug.Print "  FAIL  4: fmt_dec must be amber"
 
     ' 5) Frame 7 (I/O) keeps its text in every view
-    t = ws.Shapes(PFX_FRM & IO_FRAME).TextFrame2.TextRange.Text
+    t = ws.Shapes(PFX_FRM & IO_FRAME).TextFrame2.TextRange.text
     If InStr(t, "I/O") = 0 Then fails = fails + 1: Debug.Print "  FAIL  5: frm_7 must keep I/O text"
 
     ' Cleanup: restore the state and the view, and redraw the panel
@@ -1135,7 +1173,7 @@ Public Sub Test_RamEdit()
 
     ' 5) The frame preview of the panel follows the edit (byte 0 of frame 2 is not
     '    the edited one, so only check the panel still shows P5)
-    If InStr(ws.Shapes(PFX_FRM & "2").TextFrame2.TextRange.Text, "P5") = 0 Then fails = fails + 1: Debug.Print "  FAIL  5: frm_2 must still show P5 after the refresh"
+    If InStr(ws.Shapes(PFX_FRM & "2").TextFrame2.TextRange.text, "P5") = 0 Then fails = fails + 1: Debug.Print "  FAIL  5: frm_2 must still show P5 after the refresh"
 
     ' 6) Click on a page that is not in RAM: the grid is cleared
     PageTable(6).Present = False
@@ -1187,7 +1225,7 @@ Public Sub Test_MiniMemory()
     FrameOwner(0) = 3
     RAM(0) = &H1A: RAM(1) = &HFF: RAM(2) = &H5
     RefreshMemoryPanel
-    t = ws.Shapes(MINI_PREFIX & "0").TextFrame2.TextRange.Text
+    t = ws.Shapes(MINI_PREFIX & "0").TextFrame2.TextRange.text
     If InStr(t, "P3") = 0 Then fails = fails + 1: Debug.Print "  FAIL  2: mini_0 must show P3, got: " & Replace(t, vbLf, "/")
     If InStr(t, "1A FF 05") = 0 Then fails = fails + 1: Debug.Print "  FAIL  2: mini_0 must show 1A FF 05, got: " & Replace(t, vbLf, "/")
     If ws.Shapes(MINI_PREFIX & "0").fill.ForeColor.RGB <> CLR_LOAD Then fails = fails + 1: Debug.Print "  FAIL  2: occupied mini frame must use CLR_LOAD"
@@ -1195,29 +1233,29 @@ Public Sub Test_MiniMemory()
     ' 3) BIN view
     viewFmt = FMT_BIN
     RefreshMemoryPanel
-    t = ws.Shapes(MINI_PREFIX & "0").TextFrame2.TextRange.Text
+    t = ws.Shapes(MINI_PREFIX & "0").TextFrame2.TextRange.text
     If InStr(t, "00011010 11111111") = 0 Then fails = fails + 1: Debug.Print "  FAIL  3: mini_0 must show BIN bytes, got: " & Replace(t, vbLf, "/")
     viewFmt = FMT_HEX
 
     ' 4) Frame 0 free again
     FrameOwner(0) = -1
     RefreshMemoryPanel
-    t = ws.Shapes(MINI_PREFIX & "0").TextFrame2.TextRange.Text
+    t = ws.Shapes(MINI_PREFIX & "0").TextFrame2.TextRange.text
     If InStr(t, "free") = 0 Then fails = fails + 1: Debug.Print "  FAIL  4: mini_0 must say free, got: " & Replace(t, vbLf, "/")
     If ws.Shapes(MINI_PREFIX & "0").fill.ForeColor.RGB <> CLR_HIGHZ Then fails = fails + 1: Debug.Print "  FAIL  4: free mini frame must be grey"
 
     ' 5) Frame 7 keeps its I/O text
-    t = ws.Shapes(MINI_PREFIX & IO_FRAME).TextFrame2.TextRange.Text
+    t = ws.Shapes(MINI_PREFIX & IO_FRAME).TextFrame2.TextRange.text
     If InStr(t, "I/O") = 0 Then fails = fails + 1: Debug.Print "  FAIL  5: mini_7 must keep I/O text"
 
     ' 6) Info line follows the policy
     ReplacePolicy = POLICY_LRU
     RefreshMemoryPanel
-    t = ws.Shapes(MINI_INFO_NAME).TextFrame2.TextRange.Text
+    t = ws.Shapes(MINI_INFO_NAME).TextFrame2.TextRange.text
     If InStr(t, "LRU") = 0 Then fails = fails + 1: Debug.Print "  FAIL  6: mini_info must say LRU, got: " & t
     ReplacePolicy = POLICY_FIFO
     RefreshMemoryPanel
-    t = ws.Shapes(MINI_INFO_NAME).TextFrame2.TextRange.Text
+    t = ws.Shapes(MINI_INFO_NAME).TextFrame2.TextRange.text
     If InStr(t, "FIFO") = 0 Then fails = fails + 1: Debug.Print "  FAIL  6: mini_info must say FIFO, got: " & t
 
     ' 7) The mini names do not clash with the frames of the Memory sheet
@@ -1234,4 +1272,246 @@ Public Sub Test_MiniMemory()
 
     Debug.Print IIf(fails = 0, "Test_MiniMemory: ALL OK", "Test_MiniMemory: " & fails & " FAIL(S)")
 End Sub
+
+' ---------- Sheet handlers (they live on the Memory sheet, not in src) ----------
+
+' Inserts Worksheet_SelectionChange and Worksheet_Change into the Memory
+' sheet module. Safe to run twice. Needs Trust access to the VBA project
+' object model. Uses the sheet CodeName, not a fixed SheetN name.
+Public Sub InstallMemoryHandlers()
+    Dim ws As Worksheet
+    Dim comp As Object
+    Dim cm As Object
+    Dim src As String
+    Dim added As Integer
+    On Error GoTo EH
+
+    Set ws = Nothing
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(SH_MEM)
+    On Error GoTo EH
+    If ws Is Nothing Then
+        MsgBox "The Memory sheet (" & SH_MEM & ") was not found.", vbExclamation, "Byte Bakers"
+        Exit Sub
+    End If
+
+    Set comp = ThisWorkbook.VBProject.VBComponents(ws.CodeName)
+    Set cm = comp.CodeModule
+    src = ModuleSource(cm)
+    If Not HandlerPresent(src, "Worksheet_SelectionChange") Then
+        cm.AddFromString SelectionHandlerText()
+        added = added + 1
+    ElseIf InStr(1, src, "OnPageTableClick", vbTextCompare) = 0 Then
+        MsgBox "Worksheet_SelectionChange already exists on the Memory sheet but does not call OnPageTableClick. No second handler was added.", vbExclamation, "Byte Bakers"
+        Exit Sub
+    End If
+
+    src = ModuleSource(cm)
+    If Not HandlerPresent(src, "Worksheet_Change") Then
+        cm.AddFromString ChangeHandlerText()
+        added = added + 1
+    ElseIf InStr(1, src, "OnMemoryCellEdit", vbTextCompare) = 0 Then
+        MsgBox "Worksheet_Change already exists on the Memory sheet but does not call OnMemoryCellEdit. No second handler was added.", vbExclamation, "Byte Bakers"
+        Exit Sub
+    End If
+
+    If added = 0 Then
+        MsgBox "Memory handlers were already installed.", vbInformation, "Byte Bakers"
+    Else
+        MsgBox "Memory handlers installed (" & added & "). Save the workbook (Ctrl+S).", vbInformation, "Byte Bakers"
+    End If
+    Exit Sub
+EH:
+    If Err.Number = 1004 Then
+        MsgBox "Excel blocked access to the VBA project." & vbCrLf & vbCrLf & _
+            "Turn on: File > Options > Trust Center > Trust Center Settings > Macro Settings > Trust access to the VBA project object model.", _
+            vbExclamation, "Byte Bakers"
+    Else
+        MsgBox "InstallMemoryHandlers: " & Err.description, vbCritical, "Byte Bakers"
+    End If
+End Sub
+
+Private Function ModuleSource(ByVal cm As Object) As String
+    If cm.CountOfLines = 0 Then
+        ModuleSource = ""
+    Else
+        ModuleSource = cm.lines(1, cm.CountOfLines)
+    End If
+End Function
+
+Private Function HandlerPresent(ByVal src As String, ByVal subName As String) As Boolean
+    HandlerPresent = (InStr(1, src, "Sub " & subName, vbTextCompare) > 0)
+End Function
+
+Private Function SelectionHandlerText() As String
+    SelectionHandlerText = "Private Sub Worksheet_SelectionChange(ByVal Target As Range)" & vbCrLf & _
+        "    OnPageTableClick Target" & vbCrLf & _
+        "End Sub" & vbCrLf
+End Function
+
+Private Function ChangeHandlerText() As String
+    ChangeHandlerText = "Private Sub Worksheet_Change(ByVal Target As Range)" & vbCrLf & _
+        "    OnMemoryCellEdit Target" & vbCrLf & _
+        "End Sub" & vbCrLf
+End Function
+
+' Checks the page-table style and the coral edited byte, then restores
+' the machine state this test changed.
+Public Function Test_PanelStyle() As Long
+    Dim fails As Long
+    Dim ws As Worksheet
+    Dim old0 As TPageEntry, old1 As TPageEntry, old3 As TPageEntry
+    Dim old5 As TPageEntry, old15 As TPageEntry
+    Dim oldOwn2 As Integer, oldRam As Integer
+    Dim oldL1I As TCacheLine, oldL1D As TCacheLine
+    Dim oldL2(0 To 3) As TCacheLine
+    Dim oldStats As TStats
+    Dim oldEv As Boolean
+    Dim i As Integer
+    Dim cel As Range
+
+    fails = 0
+    On Error GoTo CleanFail
+    Set ws = ThisWorkbook.Worksheets(SH_MEM)
+    oldEv = Application.EnableEvents
+    old0 = PageTable(0)
+    old1 = PageTable(1)
+    old3 = PageTable(3)
+    old5 = PageTable(5)
+    old15 = PageTable(15)
+    oldOwn2 = FrameOwner(2)
+    oldRam = RAM(64)
+    oldL1I = L1I
+    oldL1D = L1D
+    For i = 0 To L2_LINES - 1
+        oldL2(i) = L2(i)
+    Next i
+    oldStats = Stats
+
+    RefreshPageTableView
+    fails = fails + StyleCheck("header is navy with cream bold text", HeaderLooksRight(ws))
+
+    PageTable(3).Present = False
+    RefreshPageTableRow 3
+    Set cel = ws.Cells(5, 1)
+    fails = fails + StyleCheck("absent page is cream Consolas with ink", _
+        cel.Interior.Color = CLR_TEXT And cel.Font.Color = CLR_INK And cel.Font.Name = "Consolas")
+    fails = fails + StyleCheck("absent page border is CLR_BORDER", PageBorderOk(cel))
+    fails = fails + StyleCheck("column P is 0 when the page is absent", ws.Cells(5, 2).value = 0)
+
+    PageTable(0).Present = True
+    PageTable(0).pfn = 0
+    RefreshPageTableRow 0
+    Set cel = ws.Cells(2, 1)
+    fails = fails + StyleCheck("page 0 present is amber", _
+        cel.Interior.Color = CLR_LOAD And cel.Font.Color = UI_InkFor(CLR_LOAD))
+    fails = fails + StyleCheck("column P is 1 when the page is present", ws.Cells(2, 2).value = 1)
+
+    PageTable(1).Present = True
+    PageTable(1).pfn = 1
+    RefreshPageTableRow 1
+    fails = fails + StyleCheck("data page present is gray", ws.Cells(3, 1).Interior.Color = CLR_HIGHZ)
+
+    PageTable(15).Present = True
+    PageTable(15).pfn = IO_FRAME
+    RefreshPageTableRow 15
+    Set cel = ws.Cells(17, 1)
+    fails = fails + StyleCheck("page 15 present is LCD green", _
+        cel.Interior.Color = CLR_LCD And cel.Font.Color = UI_InkFor(CLR_LCD))
+
+    PageTable(5).Present = True
+    PageTable(5).pfn = 2
+    PageTable(5).Dirty = False
+    FrameOwner(2) = 5
+    RAM(64) = &H1A
+    OnPageTableClick ws.Range("A7")
+    Application.EnableEvents = False
+    ws.Range("A47").value = "2B"
+    Application.EnableEvents = True
+    OnMemoryCellEdit ws.Range("A47")
+    fails = fails + StyleCheck("edited byte is coral", _
+        ws.Range("A47").Interior.Color = CLR_ACTIVE And ws.Range("A47").Font.Color = UI_InkFor(CLR_ACTIVE))
+    fails = fails + StyleCheck("neighbor cell is not coral", ws.Range("B47").Interior.Pattern = xlNone)
+    fails = fails + StyleCheck("edit still writes RAM and marks the page dirty", _
+        RAM(64) = &H2B And PageTable(5).Dirty)
+    RefreshMemoryPanel
+    fails = fails + StyleCheck("edited byte stays coral after RefreshMemoryPanel", _
+        ws.Range("A47").Interior.Color = CLR_ACTIVE)
+
+    GoTo Clean
+CleanFail:
+    fails = fails + 1
+    Debug.Print "  FAIL  Test_PanelStyle stopped: " & Err.description
+Clean:
+    On Error Resume Next
+    RAM(64) = oldRam
+    FrameOwner(2) = oldOwn2
+    PageTable(0) = old0
+    PageTable(1) = old1
+    PageTable(3) = old3
+    PageTable(5) = old5
+    PageTable(15) = old15
+    L1I = oldL1I
+    L1D = oldL1D
+    For i = 0 To L2_LINES - 1
+        L2(i) = oldL2(i)
+    Next i
+    Stats = oldStats
+    Application.EnableEvents = oldEv
+    RefreshPageTableView
+    BuildMemoryPanel
+    RefreshMemoryPanel
+    On Error GoTo 0
+    If fails = 0 Then
+        Debug.Print "Test_PanelStyle: ALL OK"
+    Else
+        Debug.Print "Test_PanelStyle: " & fails & " FAIL(S)"
+    End If
+    Test_PanelStyle = fails
+End Function
+
+Private Function StyleCheck(ByVal what As String, ByVal passed As Boolean) As Long
+    If passed Then
+        Debug.Print "  OK    " & what
+        StyleCheck = 0
+    Else
+        Debug.Print "  FAIL  " & what
+        StyleCheck = 1
+    End If
+End Function
+
+Private Function HeaderLooksRight(ByVal ws As Worksheet) As Boolean
+    Dim c As Integer
+    HeaderLooksRight = True
+    For c = 1 To 5
+        If ws.Cells(1, c).Interior.Color <> CLR_BG Then
+            HeaderLooksRight = False
+        End If
+        If ws.Cells(1, c).Font.Color <> CLR_TEXT Then
+            HeaderLooksRight = False
+        End If
+        If ws.Cells(1, c).Font.bold <> True Then
+            HeaderLooksRight = False
+        End If
+    Next c
+End Function
+
+Private Function PageBorderOk(ByVal cel As Range) As Boolean
+    PageBorderOk = True
+    If cel.Borders(xlEdgeLeft).LineStyle <> xlContinuous Then
+        PageBorderOk = False
+    End If
+    If cel.Borders(xlEdgeLeft).Color <> CLR_BORDER Then
+        PageBorderOk = False
+    End If
+    If cel.Borders(xlEdgeRight).Color <> CLR_BORDER Then
+        PageBorderOk = False
+    End If
+    If cel.Borders(xlEdgeTop).Color <> CLR_BORDER Then
+        PageBorderOk = False
+    End If
+    If cel.Borders(xlEdgeBottom).Color <> CLR_BORDER Then
+        PageBorderOk = False
+    End If
+End Function
 
