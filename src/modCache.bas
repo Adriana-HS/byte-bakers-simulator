@@ -247,6 +247,22 @@ Private Sub EnsureCacheTable(ByVal ws As Worksheet)
         ws.Cells(CACHE_HDR_ROW, 4 + i).value = "B" & i
     Next i
     ws.Range(ws.Cells(CACHE_HDR_ROW, 1), ws.Cells(CACHE_HDR_ROW, 11)).Font.bold = True
+    ' Header in navy with cream bold text
+    With ws.Range(ws.Cells(CACHE_HDR_ROW, 1), ws.Cells(CACHE_HDR_ROW, 11))
+        .Interior.Color = CLR_BG
+        .Font.Color = CLR_TEXT
+    End With
+    ' Body in cream with ink
+    With ws.Range(ws.Cells(CACHE_HDR_ROW + 1, 1), ws.Cells(CACHE_HDR_ROW + 6, 11))
+        .Interior.Color = CLR_TEXT
+        .Font.Color = CLR_INK
+    End With
+    ' Borders
+    With ws.Range(ws.Cells(CACHE_HDR_ROW, 1), ws.Cells(CACHE_HDR_ROW + 6, 11)).Borders
+        .LineStyle = xlContinuous
+        .Weight = xlThin
+        .Color = CLR_BORDER
+    End With
 End Sub
 
 Private Function RowLabel(ByVal rowNum As Long) As String

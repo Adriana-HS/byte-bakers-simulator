@@ -108,8 +108,28 @@ Public Sub RefreshVMemGrid()
         .Font.Size = 9
         .HorizontalAlignment = xlCenter
     End With
-    ws.Range(ws.Cells(1, GRID_LABEL_COL), ws.Cells(1, lastCol)).Font.Bold = True
-    ws.Range(ws.Cells(2, GRID_LABEL_COL), ws.Cells(NUM_VPAGES + 1, GRID_LABEL_COL)).Font.Bold = True
+    ' Header row in navy with bold cream text
+    With ws.Range(ws.Cells(1, GRID_LABEL_COL), ws.Cells(1, lastCol))
+        .Interior.Color = CLR_BG
+        .Font.Color = CLR_TEXT
+        .Font.Bold = True
+    End With
+    ' Label column in navy with bold cream text
+    With ws.Range(ws.Cells(2, GRID_LABEL_COL), ws.Cells(NUM_VPAGES + 1, GRID_LABEL_COL))
+        .Interior.Color = CLR_BG
+        .Font.Color = CLR_TEXT
+        .Font.Bold = True
+    End With
+    ' Data cells in cream with dark ink
+    With ws.Range(ws.Cells(2, GRID_DATA_COL), ws.Cells(NUM_VPAGES + 1, lastCol))
+        .Interior.Color = CLR_TEXT
+        .Font.Color = CLR_INK
+    End With
+    With ws.Range(ws.Cells(1, GRID_LABEL_COL), ws.Cells(NUM_VPAGES + 1, lastCol)).Borders
+        .LineStyle = xlContinuous
+        .Weight = xlThin
+        .Color = CLR_BORDER
+    End With
     ws.Cells(1, GRID_LABEL_COL).value = "VMem"
     ws.Columns(GRID_LABEL_COL).ColumnWidth = 6
     ws.Range(ws.Columns(GRID_DATA_COL), ws.Columns(lastCol)).ColumnWidth = 3.5
