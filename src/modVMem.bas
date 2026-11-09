@@ -1,19 +1,19 @@
 Attribute VB_Name = "modVMem"
 Option Explicit
 ' =====================================================================
-' modVMem - Memoria virtual / area de swap (K2)
-'   VMem(0..511) = 16 paginas x 32 bytes (el "disco" de la maquina).
-'   SwapIn  : swap -> marco de RAM   (al resolver un Page Fault)
-'   SwapOut : marco de RAM -> swap   (al desalojar una pagina sucia)
-' La hoja Memory muestra las 16 paginas en una grilla 16 x 32 en
-' hexadecimal, desde la celda H1 (la tabla de paginas ocupa A1:E17).
+' modVMem - Virtual memory / swap area (K2)
+'   VMem(0..511) = 16 pages x 32 bytes (the "disk" of the machine).
+'   SwapIn  : swap -> RAM frame   (when a Page Fault is resolved)
+'   SwapOut : RAM frame -> swap   (when a dirty page is evicted)
+' The Memory sheet shows the 16 pages in a 16 x 32 grid in
+' hexadecimal, starting at cell H1 (the page table uses A1:E17).
 ' =====================================================================
 
-' Primera columna de la grilla: H = 8 (etiquetas P0..P15), datos en I..AN
+' First column of the grid: H = 8 (labels P0..P15), data in I..AN
 Private Const GRID_LABEL_COL As Long = 8
 Private Const GRID_DATA_COL As Long = 9
 
-' ---------- Operaciones sobre la memoria virtual ----------
+' ---------- Operations on virtual memory ----------
 
 Public Sub ClearVMem()
     Dim i As Integer
@@ -21,7 +21,7 @@ Public Sub ClearVMem()
     RefreshVMemGrid
 End Sub
 
-' Copia bytes() a VMem a partir de startAddr (el cargador usa esto)
+' Copies bytes() into VMem starting at startAddr (the loader uses this)
 Public Sub VMemWriteBlock(ByVal startAddr As Integer, bytes() As Integer)
     Dim i As Integer, n As Integer
     n = UBound(bytes) - LBound(bytes) + 1
@@ -34,7 +34,7 @@ Public Sub VMemWriteBlock(ByVal startAddr As Integer, bytes() As Integer)
     RefreshVMemGrid
 End Sub
 
-' swap -> marco de RAM: copia los 32 bytes de la pagina vpn al marco pfn
+' swap -> RAM frame: copies the 32 bytes of page vpn into frame pfn
 Public Sub SwapIn(ByVal vpn As Integer, ByVal pfn As Integer)
     Dim i As Integer
     CheckSwapArgs vpn, pfn
@@ -43,7 +43,7 @@ Public Sub SwapIn(ByVal vpn As Integer, ByVal pfn As Integer)
     Next i
 End Sub
 
-' marco de RAM -> swap: guarda los 32 bytes del marco pfn en la pagina vpn
+' RAM frame -> swap: saves the 32 bytes of frame pfn into page vpn
 Public Sub SwapOut(ByVal vpn As Integer, ByVal pfn As Integer)
     Dim i As Integer
     CheckSwapArgs vpn, pfn
@@ -62,7 +62,7 @@ Private Sub CheckSwapArgs(ByVal vpn As Integer, ByVal pfn As Integer)
     End If
 End Sub
 
-' ---------- Grilla 16 x 32 hexadecimal en la hoja Memory ----------
+' ---------- 16 x 32 hexadecimal grid on the Memory sheet ----------
 
 Private Function Hex2(ByVal v As Integer) As String
     Hex2 = Right$("0" & Hex$(v And BYTE_MAX), 2)
@@ -78,7 +78,7 @@ Private Function GetVMemSheet() As Worksheet
     End If
 End Function
 
-' Dibuja encabezados (offsets 00..1F, etiquetas P0..P15) y los 512 bytes
+' Draws the headers (offsets 00..1F, labels P0..P15) and the 512 bytes
 Public Sub RefreshVMemGrid()
     Dim ws As Worksheet, p As Integer, o As Integer
     Dim hdr(0 To 0, 0 To PAGE_SIZE - 1) As String
@@ -97,7 +97,7 @@ Public Sub RefreshVMemGrid()
         Next o
     Next p
 
-    ' formato texto para que Excel no convierta "10" en numero ni "1E" en notacion cientifica
+    ' text format so Excel does not turn "10" into a number or "1E" into scientific notation
     ws.Range(ws.Cells(1, GRID_LABEL_COL), ws.Cells(NUM_VPAGES + 1, lastCol)).NumberFormat = "@"
     ws.Range(ws.Cells(1, GRID_DATA_COL), ws.Cells(1, lastCol)).value = hdr
     ws.Range(ws.Cells(2, GRID_LABEL_COL), ws.Cells(NUM_VPAGES + 1, GRID_LABEL_COL)).value = lbl
@@ -105,20 +105,20 @@ Public Sub RefreshVMemGrid()
 
     With ws.Range(ws.Cells(1, GRID_LABEL_COL), ws.Cells(NUM_VPAGES + 1, lastCol))
         .Font.Name = "Consolas"
-        .Font.Size = 9
+        .Font.size = 9
         .HorizontalAlignment = xlCenter
     End With
     ' Header row in navy with bold cream text
     With ws.Range(ws.Cells(1, GRID_LABEL_COL), ws.Cells(1, lastCol))
         .Interior.Color = CLR_BG
         .Font.Color = CLR_TEXT
-        .Font.Bold = True
+        .Font.bold = True
     End With
     ' Label column in navy with bold cream text
     With ws.Range(ws.Cells(2, GRID_LABEL_COL), ws.Cells(NUM_VPAGES + 1, GRID_LABEL_COL))
         .Interior.Color = CLR_BG
         .Font.Color = CLR_TEXT
-        .Font.Bold = True
+        .Font.bold = True
     End With
     ' Data cells in cream with dark ink
     With ws.Range(ws.Cells(2, GRID_DATA_COL), ws.Cells(NUM_VPAGES + 1, lastCol))
@@ -127,7 +127,7 @@ Public Sub RefreshVMemGrid()
     End With
     With ws.Range(ws.Cells(1, GRID_LABEL_COL), ws.Cells(NUM_VPAGES + 1, lastCol)).Borders
         .LineStyle = xlContinuous
-        .Weight = xlThin
+        .weight = xlThin
         .Color = CLR_BORDER
     End With
     ws.Cells(1, GRID_LABEL_COL).value = "VMem"
@@ -135,7 +135,7 @@ Public Sub RefreshVMemGrid()
     ws.Range(ws.Columns(GRID_DATA_COL), ws.Columns(lastCol)).ColumnWidth = 3.5
 End Sub
 
-' Redibuja solo la fila de una pagina (se usa despues de un SwapOut)
+' Redraws only the row of one page (used after a SwapOut)
 Public Sub RefreshVMemRow(ByVal vpn As Integer)
     Dim ws As Worksheet, o As Integer, r As Long
     Dim rowData(0 To 0, 0 To PAGE_SIZE - 1) As String
@@ -146,17 +146,17 @@ Public Sub RefreshVMemRow(ByVal vpn As Integer)
     ws.Range(ws.Cells(r, GRID_DATA_COL), ws.Cells(r, GRID_DATA_COL + PAGE_SIZE - 1)).value = rowData
 End Sub
 
-' ---------- PRUEBAS ----------
-' Ejecutar con F5 (cursor dentro del Sub) y mirar Inmediato (Ctrl+G)
+' ---------- TESTS ----------
+' Run with F5 (cursor inside the Sub) and watch the Immediate window (Ctrl+G)
 Public Sub Test_VMem()
     Dim fails As Integer, i As Integer, ws As Worksheet, ok As Boolean
     Dim blk(0 To 2) As Integer
     Set ws = GetVMemSheet()
 
-    ' Punto de partida limpio: marcos 0..6 de RAM en cero (el marco 7 es E/S, no se toca)
+    ' Clean starting point: RAM frames 0..6 at zero (frame 7 is I/O, not touched)
     For i = 0 To 7 * PAGE_SIZE - 1: RAM(i) = 0: Next i
 
-    ' 1) ClearVMem pone todo en 0
+    ' 1) ClearVMem sets everything to 0
     VMem(5) = 9: VMem(511) = 1
     ClearVMem
     ok = True
@@ -165,13 +165,13 @@ Public Sub Test_VMem()
     Next i
     If Not ok Then fails = fails + 1: Debug.Print "  FAIL  ClearVMem no dejo VMem en 0"
 
-    ' 2) VMemWriteBlock copia en la direccion pedida
+    ' 2) VMemWriteBlock copies at the requested address
     blk(0) = 11: blk(1) = 22: blk(2) = 300
     VMemWriteBlock 64, blk
     If VMem(64) <> 11 Or VMem(65) <> 22 Or VMem(66) <> 44 Then fails = fails + 1: Debug.Print "  FAIL  VMemWriteBlock (esperado 11, 22, 44)"
     If VMem(67) <> 0 Then fails = fails + 1: Debug.Print "  FAIL  VMemWriteBlock escribio de mas"
 
-    ' 3) SwapIn: pagina 3 de swap -> marco 5 de RAM
+    ' 3) SwapIn: swap page 3 -> RAM frame 5
     ClearVMem
     For i = 0 To PAGE_SIZE - 1: VMem(3 * PAGE_SIZE + i) = i + 1: Next i
     SwapIn 3, 5
@@ -182,7 +182,7 @@ Public Sub Test_VMem()
     If Not ok Then fails = fails + 1: Debug.Print "  FAIL  SwapIn 3,5 no copio la pagina al marco"
     If RAM(5 * PAGE_SIZE - 1) <> 0 Or RAM(6 * PAGE_SIZE) <> 0 Then fails = fails + 1: Debug.Print "  FAIL  SwapIn toco marcos vecinos"
 
-    ' 4) SwapOut: marco 2 de RAM -> pagina 7 de swap
+    ' 4) SwapOut: RAM frame 2 -> swap page 7
     For i = 0 To PAGE_SIZE - 1: RAM(2 * PAGE_SIZE + i) = 200 + i: Next i
     SwapOut 7, 2
     ok = True
@@ -192,7 +192,7 @@ Public Sub Test_VMem()
     If Not ok Then fails = fails + 1: Debug.Print "  FAIL  SwapOut 7,2 no copio el marco a la pagina"
     If VMem(7 * PAGE_SIZE - 1) <> 0 Or VMem(8 * PAGE_SIZE) <> 0 Then fails = fails + 1: Debug.Print "  FAIL  SwapOut toco paginas vecinas"
 
-    ' 5) Argumentos fuera de rango dan error claro
+    ' 5) Out-of-range arguments give a clear error
     On Error Resume Next
     SwapIn 16, 0
     If Err.Number <> vbObjectError + 540 Then fails = fails + 1: Debug.Print "  FAIL  SwapIn con pagina 16 no dio error"
@@ -205,7 +205,7 @@ Public Sub Test_VMem()
     Err.Clear
     On Error GoTo 0
 
-    ' 6) La grilla de la hoja Memory
+    ' 6) The grid on the Memory sheet
     ClearVMem
     VMem(0) = &H1F: VMem(511) = &HAB: VMem(33) = &HA
     RefreshVMemGrid
@@ -215,14 +215,14 @@ Public Sub Test_VMem()
     If CStr(ws.Cells(17, 40).value) <> "AB" Then fails = fails + 1: Debug.Print "  FAIL  VMem(511) deberia verse como AB"
     If CStr(ws.Cells(3, 10).value) <> "0A" Then fails = fails + 1: Debug.Print "  FAIL  VMem(33) deberia verse como 0A (pagina 1, offset 1)"
 
-    ' Limpieza: deja VMem y los marcos 0..6 de RAM en 0
+    ' Cleanup: leaves VMem and RAM frames 0..6 at 0
     ClearVMem
     For i = 0 To 7 * PAGE_SIZE - 1: RAM(i) = 0: Next i
     Debug.Print IIf(fails = 0, "Test_VMem: ALL OK", "Test_VMem: " & fails & " FAIL(S)")
 End Sub
 
-' Para la captura del PR: llena VMem con el patron 00..FF (dos veces)
-' y dibuja la grilla. Despues escribe ClearVMem en Inmediato para dejarla en ceros.
+' For the PR screenshot: fills VMem with the pattern 00..FF (twice)
+' and draws the grid. Then type ClearVMem in the Immediate window to leave it at zeros.
 Public Sub Demo_VMemGrid()
     Dim i As Integer
     For i = 0 To VMEM_SIZE - 1: VMem(i) = i Mod 256: Next i

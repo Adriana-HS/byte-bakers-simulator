@@ -1,17 +1,17 @@
 Attribute VB_Name = "modMMU"
 Option Explicit
 ' =====================================================================
-' modMMU - Unidad de gestion de memoria
-'   K3: tabla de paginas | K4: traduccion | K5: Page Fault (FIFO / LRU)
-' Direccion virtual (9 bits) = [VPN 4 bits | offset 5 bits]
-' Direccion fisica  (8 bits) = [PFN 3 bits | offset 5 bits]
-' La pagina 15 es E/S: siempre en el marco 7, fija (Pinned), sin cache.
+' modMMU - Memory management unit
+'   K3: page table | K4: translation | K5: Page Fault (FIFO / LRU)
+' Virtual address  (9 bits) = [VPN 4 bits | offset 5 bits]
+' Physical address (8 bits) = [PFN 3 bits | offset 5 bits]
+' Page 15 is I/O: always in frame 7, pinned, never cached.
 ' =====================================================================
 
-' ---------- K3: TABLA DE PAGINAS ----------
+' ---------- K3: PAGE TABLE ----------
 
-' Deja la tabla de paginas con todas las paginas ausentes (P=0),
-' excepto la 15, que queda en el marco 7 y fija.
+' Leaves the page table with every page absent (P=0),
+' except page 15, which stays in frame 7 and pinned.
 Public Sub InitPageTable()
     Dim i As Integer, emptyPTE As TPageEntry
     For i = 0 To NUM_VPAGES - 1: PageTable(i) = emptyPTE: Next i
@@ -25,7 +25,7 @@ Public Sub InitPageTable()
     RefreshPageTableView
 End Sub
 
-' Dibuja la tabla VPN / P / PFN / D / R completa en la hoja Memory (A1:E17)
+' Draws the whole VPN / P / PFN / D / R table on the Memory sheet (A1:E17)
 Public Sub RefreshPageTableView()
     Dim ws As Worksheet, i As Integer
     Dim hdr As Range
@@ -42,7 +42,7 @@ Public Sub RefreshPageTableView()
     Next i
 End Sub
 
-' Redibuja solo la fila de una pagina (se llama en cada acceso).
+' Redraws only the row of one page (called on every access).
 ' Present: type color (page 0 amber, pages 1-14 gray, page 15 LCD green).
 ' Absent: cream fill and ink text. Column P stays 1 or 0.
 Public Sub RefreshPageTableRow(ByVal vpn As Integer)
@@ -98,12 +98,12 @@ Private Function GetMemorySheet() As Worksheet
     End If
 End Function
 
-' ---------- K4: TRADUCCION VIRTUAL -> FISICA ----------
+' ---------- K4: VIRTUAL -> PHYSICAL TRANSLATION ----------
 
-' Traduce una direccion virtual (0..511) a fisica (0..255).
-'  - Si la pagina esta ausente (P=0) llama a HandlePageFault (K5) antes.
-'  - Marca Ref=1 en cada acceso y Dirty=1 si es escritura.
-'  - Deja el resultado en CPU.PADDR y actualiza la fila de la tabla.
+' Translates a virtual address (0..511) to a physical one (0..255).
+'  - If the page is absent (P=0) it calls HandlePageFault (K5) first.
+'  - Sets Ref=1 on every access and Dirty=1 if it is a write.
+'  - Leaves the result in CPU.PADDR and updates the table row.
 Public Function Translate(ByVal vaddr As Integer, ByVal isWrite As Boolean) As Integer
     Dim vpn As Integer, offset As Integer, paddr As Integer
     If vaddr < 0 Or vaddr > VADDR_MAX Then
@@ -111,9 +111,9 @@ Public Function Translate(ByVal vaddr As Integer, ByVal isWrite As Boolean) As I
     End If
     vpn = vaddr \ PAGE_SIZE
     offset = vaddr Mod PAGE_SIZE
-    ShowTranslation vpn, offset                      ' muestra la traduccion en vivo (K10)
+    ShowTranslation vpn, offset                      ' shows the live translation (K10)
     If Not PageTable(vpn).Present Then
-        HandlePageFault vpn                          ' K5: carga la pagina
+        HandlePageFault vpn                          ' K5: loads the page
         If Not PageTable(vpn).Present Then
             Err.Raise vbObjectError + 532, "MMU", "La pagina " & vpn & " sigue ausente despues de HandlePageFault"
         End If
@@ -131,21 +131,21 @@ End Function
 
 ' ---------- K5: PAGE FAULT ----------
 
-' Carga la pagina vpn en un marco de RAM:
-'  1) usa un marco libre si hay; si no, elige victima (FIFO o LRU segun ReplacePolicy)
-'  2) si la victima esta sucia (Dirty=1) la guarda en swap
-'  3) invalida las lineas de cache del marco (L1I, L1D, L2)
-'  4) copia la pagina desde swap y marca P=1
-' La pagina 15 (E/S, Pinned) nunca es victima.
+' Loads page vpn into a RAM frame:
+'  1) uses a free frame if there is one; otherwise picks a victim (FIFO or LRU per ReplacePolicy)
+'  2) if the victim is dirty (Dirty=1) it is saved to swap
+'  3) invalidates the cache lines of the frame (L1I, L1D, L2)
+'  4) copies the page from swap and sets P=1
+' Page 15 (I/O, Pinned) is never a victim.
 Public Sub HandlePageFault(ByVal vpn As Integer)
     Dim pfn As Integer, victim As Integer
     If vpn < 0 Or vpn > NUM_VPAGES - 1 Then
         Err.Raise vbObjectError + 533, "MMU", "Pagina virtual fuera de rango (0-" & NUM_VPAGES - 1 & "): " & vpn
     End If
-    If PageTable(vpn).Present Then Exit Sub          ' ya esta cargada: no hay fallo
+    If PageTable(vpn).Present Then Exit Sub          ' already loaded: no fault
 
     Stats.PageFaults = Stats.PageFaults + 1
-    UI_PageFaultFlash vpn                            ' entrada roja (K10)
+    UI_PageFaultFlash vpn                            ' red flash (K10)
 
     pfn = FindFreeFrame()
     If pfn = -1 Then
@@ -159,26 +159,26 @@ Public Sub HandlePageFault(ByVal vpn As Integer)
             .pfn = 0
         End With
         FrameOwner(pfn) = -1
-        InvalidateFrame pfn                          ' K8: invalida L1I, L1D y L2 de ese marco
+        InvalidateFrame pfn                          ' K8: invalidates L1I, L1D and L2 for that frame
         RefreshPageTableRow victim
     End If
 
     SwapIn vpn, pfn
-    UI_AnimateSwapIn vpn, pfn                        ' bloque swap -> marco (K10)
+    UI_AnimateSwapIn vpn, pfn                        ' swap -> frame block (K10)
 
     With PageTable(vpn)
         .Present = True
         .pfn = pfn
         .Dirty = False
         .Ref = False
-        .LoadedAt = Clock                            ' para FIFO
-        .LastUse = Clock                             ' para LRU
+        .LoadedAt = Clock                            ' for FIFO
+        .LastUse = Clock                             ' for LRU
     End With
     FrameOwner(pfn) = vpn
     RefreshPageTableRow vpn
 End Sub
 
-' Primer marco libre, o -1 si la RAM esta llena
+' First free frame, or -1 if RAM is full
 Private Function FindFreeFrame() As Integer
     Dim i As Integer
     For i = 0 To NUM_FRAMES - 1
@@ -187,8 +187,8 @@ Private Function FindFreeFrame() As Integer
     FindFreeFrame = -1
 End Function
 
-' Elige la victima: FIFO = menor LoadedAt, LRU = menor LastUse.
-' Solo paginas presentes y NO fijas (la 15 nunca se desaloja).
+' Picks the victim: FIFO = lowest LoadedAt, LRU = lowest LastUse.
+' Only present and NOT pinned pages (page 15 is never evicted).
 Private Function ChooseVictim() As Integer
     Dim i As Integer, best As Integer, bestTime As Long, t As Long
     best = -1
@@ -212,12 +212,12 @@ Private Function ChooseVictim() As Integer
     ChooseVictim = best
 End Function
 
-' ---------- PRUEBAS ----------
-' Ejecutar con F5 (cursor dentro del Sub) y mirar Inmediato (Ctrl+G)
+' ---------- TESTS ----------
+' Run with F5 (cursor inside the Sub) and watch the Immediate window (Ctrl+G)
 Public Sub Test_PageTable()
     Dim i As Integer, fails As Integer, ws As Worksheet
 
-    ' 1) Estado inicial en memoria
+    ' 1) Initial state in memory
     InitPageTable
     For i = 0 To NUM_VPAGES - 2
         If PageTable(i).Present Then fails = fails + 1: Debug.Print "  FAIL  pagina " & i & " deberia estar ausente"
@@ -229,13 +229,13 @@ Public Sub Test_PageTable()
     If Not PageTable(IO_VPAGE).Pinned Then fails = fails + 1: Debug.Print "  FAIL  pagina 15 no esta fija"
     If FrameOwner(IO_FRAME) <> IO_VPAGE Then fails = fails + 1: Debug.Print "  FAIL  el marco 7 no pertenece a la pagina 15"
 
-    ' 2) Lo que se ve en la hoja Memory
+    ' 2) What is shown on the Memory sheet
     Set ws = ThisWorkbook.Worksheets(SH_MEM)
     If ws.Cells(1, 1).value <> "VPN" Then fails = fails + 1: Debug.Print "  FAIL  falta el encabezado VPN"
     If ws.Cells(2, 2).value <> 0 Or CStr(ws.Cells(2, 3).value) <> "-" Then fails = fails + 1: Debug.Print "  FAIL  fila de la pagina 0 deberia mostrar P=0, PFN=-"
     If ws.Cells(17, 2).value <> 1 Or CStr(ws.Cells(17, 3).value) <> "7" Then fails = fails + 1: Debug.Print "  FAIL  fila de la pagina 15 deberia mostrar P=1, PFN=7"
 
-    ' 3) La vista se actualiza cuando cambia la tabla
+    ' 3) The view updates when the table changes
     With PageTable(3)
         .Present = True: .pfn = 2: .Dirty = True: .Ref = True
     End With
@@ -245,7 +245,7 @@ Public Sub Test_PageTable()
         fails = fails + 1: Debug.Print "  FAIL  la fila de la pagina 3 no se actualizo (esperado P=1 PFN=2 D=1 R=1)"
     End If
 
-    ' 4) InitPageTable deja todo limpio otra vez
+    ' 4) InitPageTable leaves everything clean again
     InitPageTable
     If PageTable(3).Present Or FrameOwner(2) <> -1 Or ws.Cells(5, 2).value <> 0 Then
         fails = fails + 1: Debug.Print "  FAIL  InitPageTable no limpio la pagina 3"
@@ -259,7 +259,7 @@ Public Sub Test_Translate()
     InitPageTable
     Set ws = ThisWorkbook.Worksheets(SH_MEM)
 
-    ' Pagina 13 cargada a mano en el marco 4 (asi no depende de HandlePageFault)
+    ' Page 13 loaded by hand into frame 4 (so it does not depend on HandlePageFault)
     With PageTable(13)
         .Present = True: .pfn = 4
     End With
@@ -272,20 +272,20 @@ Public Sub Test_Translate()
     If Not PageTable(13).Ref Then fails = fails + 1: Debug.Print "  FAIL  la lectura no puso Ref=1"
     If PageTable(13).Dirty Then fails = fails + 1: Debug.Print "  FAIL  la lectura puso Dirty=1"
 
-    ' 2) Una escritura pone Dirty=1
+    ' 2) A write sets Dirty=1
     p = Translate(&H1A5, True)
     If Not PageTable(13).Dirty Then fails = fails + 1: Debug.Print "  FAIL  la escritura no puso Dirty=1"
 
-    ' 3) La fila de la tabla (VPN 13 = fila 15) se actualiza en cada acceso
+    ' 3) The table row (VPN 13 = row 15) is updated on every access
     If ws.Cells(15, 2).value <> 1 Or CStr(ws.Cells(15, 3).value) <> "4" Or ws.Cells(15, 4).value <> 1 Or ws.Cells(15, 5).value <> 1 Then
         fails = fails + 1: Debug.Print "  FAIL  la fila de la pagina 13 no muestra P=1 PFN=4 D=1 R=1"
     End If
 
-    ' 4) Pagina 15 (E/S): &H1E0 -> marco 7, offset 0 -> 224 (&HE0)
+    ' 4) Page 15 (I/O): &H1E0 -> frame 7, offset 0 -> 224 (&HE0)
     p = Translate(&H1E0, False)
     If p <> 224 Then fails = fails + 1: Debug.Print "  FAIL  Translate(&H1E0) = " & p & " (esperado 224)"
 
-    ' 5) Direccion fuera de rango: debe dar error claro
+    ' 5) Out-of-range address: must give a clear error
     On Error Resume Next
     p = Translate(512, False)
     If Err.Number <> vbObjectError + 531 Then fails = fails + 1: Debug.Print "  FAIL  Translate(512) no dio el error de rango"
@@ -296,9 +296,9 @@ Public Sub Test_Translate()
     Debug.Print IIf(fails = 0, "Test_Translate: ALL OK", "Test_Translate: " & fails & " FAIL(S)")
 End Sub
 
-' Prepara una maquina limpia para las pruebas de Page Fault:
-' swap con un patron por pagina (VMem(p*32) = 100+p), marcos 0..6 en 0,
-' tabla de paginas limpia, contadores en 0 y la politica pedida.
+' Prepares a clean machine for the Page Fault tests:
+' swap with one pattern per page (VMem(p*32) = 100+p), frames 0..6 at 0,
+' clean page table, counters at 0 and the requested policy.
 Private Sub PreparePFTest(ByVal policy As Integer)
     Dim p As Integer, i As Integer
     ClearVMem
@@ -310,7 +310,7 @@ Private Sub PreparePFTest(ByVal policy As Integer)
     Clock = 0
 End Sub
 
-' Lee la primera direccion de las paginas 0..n-1 (el reloj avanza 1 por acceso)
+' Reads the first address of pages 0..n-1 (the clock advances 1 per access)
 Private Sub LoadFirstPages(ByVal n As Integer)
     Dim p As Integer
     For p = 0 To n - 1
@@ -325,7 +325,7 @@ Public Sub Test_PageFault()
     oldPolicy = ReplacePolicy: oldClock = Clock
     Set ws = ThisWorkbook.Worksheets(SH_MEM)
 
-    ' ===== 1) Marcos libres: 7 paginas -> 7 Page Faults, sin desalojar =====
+    ' ===== 1) Free frames: 7 pages -> 7 Page Faults, no eviction =====
     PreparePFTest POLICY_FIFO
     LoadFirstPages 7
     If Stats.PageFaults <> 7 Then fails = fails + 1: Debug.Print "  FAIL  1: Page Faults = " & Stats.PageFaults & " (esperado 7)"
@@ -337,11 +337,11 @@ Public Sub Test_PageFault()
     Next p
     If Not PageTable(IO_VPAGE).Present Or FrameOwner(IO_FRAME) <> IO_VPAGE Then fails = fails + 1: Debug.Print "  FAIL  1: la pagina 15 se movio del marco 7"
 
-    ' ===== 2) FIFO con victima SUCIA: sale la pagina 0 aunque se uso hace poco =====
-    Clock = Clock + 1: Translate 1, True            ' escritura en pagina 0 -> Dirty
-    RAM(1) = 77                                     ' el dato que "escribio" el programa
-    Clock = Clock + 1: Translate 0, False           ' leerla de nuevo NO la salva en FIFO
-    Clock = Clock + 1: Translate 7 * PAGE_SIZE, False ' pagina 7: RAM llena -> Page Fault
+    ' ===== 2) FIFO with a DIRTY victim: page 0 goes out even if it was used recently =====
+    Clock = Clock + 1: Translate 1, True            ' write to page 0 -> Dirty
+    RAM(1) = 77                                     ' the data the program "wrote"
+    Clock = Clock + 1: Translate 0, False           ' reading it again does NOT save it in FIFO
+    Clock = Clock + 1: Translate 7 * PAGE_SIZE, False ' page 7: RAM full -> Page Fault
     If Stats.PageFaults <> 8 Then fails = fails + 1: Debug.Print "  FAIL  2: Page Faults = " & Stats.PageFaults & " (esperado 8)"
     If PageTable(0).Present Then fails = fails + 1: Debug.Print "  FAIL  2: FIFO deberia desalojar la pagina 0"
     If Not PageTable(7).Present Or PageTable(7).pfn <> 0 Or FrameOwner(0) <> 7 Then fails = fails + 1: Debug.Print "  FAIL  2: la pagina 7 deberia quedar en el marco 0"
@@ -352,24 +352,24 @@ Public Sub Test_PageFault()
         fails = fails + 1: Debug.Print "  FAIL  2: la tabla visible no muestra P0 ausente y P7 en el marco 0"
     End If
 
-    ' ===== 3) FIFO con victima LIMPIA: no se escribe en swap =====
-    RAM(1 * PAGE_SIZE + 5) = 55                     ' cambio en RAM sin marcar Dirty
-    Clock = Clock + 1: Translate 8 * PAGE_SIZE, False ' sale la pagina 1 (la mas vieja ahora)
+    ' ===== 3) FIFO with a CLEAN victim: nothing is written to swap =====
+    RAM(1 * PAGE_SIZE + 5) = 55                     ' change in RAM without marking Dirty
+    Clock = Clock + 1: Translate 8 * PAGE_SIZE, False ' page 1 goes out (the oldest now)
     If PageTable(1).Present Then fails = fails + 1: Debug.Print "  FAIL  3: FIFO deberia desalojar la pagina 1"
     If VMem(1 * PAGE_SIZE + 5) <> 0 Then fails = fails + 1: Debug.Print "  FAIL  3: una victima limpia no debe guardarse en swap"
     If Stats.PageFaults <> 9 Then fails = fails + 1: Debug.Print "  FAIL  3: Page Faults = " & Stats.PageFaults & " (esperado 9)"
 
-    ' ===== 4) LRU: la pagina 0, usada hace poco, se salva; sale la 1 =====
+    ' ===== 4) LRU: page 0, used recently, is saved; page 1 goes out =====
     PreparePFTest POLICY_LRU
     LoadFirstPages 7
-    Clock = Clock + 1: Translate 0, False           ' pagina 0 pasa a ser la mas reciente
+    Clock = Clock + 1: Translate 0, False           ' page 0 becomes the most recent
     Clock = Clock + 1: Translate 7 * PAGE_SIZE, False
     If PageTable(1).Present Then fails = fails + 1: Debug.Print "  FAIL  4: LRU deberia desalojar la pagina 1"
     If Not PageTable(0).Present Then fails = fails + 1: Debug.Print "  FAIL  4: LRU no debia desalojar la pagina 0"
     If Not PageTable(7).Present Or PageTable(7).pfn <> 1 Or FrameOwner(1) <> 7 Then fails = fails + 1: Debug.Print "  FAIL  4: la pagina 7 deberia quedar en el marco 1"
     If Stats.PageFaults <> 8 Then fails = fails + 1: Debug.Print "  FAIL  4: Page Faults = " & Stats.PageFaults & " (esperado 8)"
 
-    ' ===== 5) Sin victima posible (todas fijas): error claro y la 15 intacta =====
+    ' ===== 5) No possible victim (all pinned): clear error and page 15 intact =====
     PreparePFTest POLICY_FIFO
     LoadFirstPages 7
     For p = 0 To 6: PageTable(p).Pinned = True: Next p
@@ -381,14 +381,14 @@ Public Sub Test_PageFault()
     If PageTable(7).Present Then fails = fails + 1: Debug.Print "  FAIL  5: la pagina 7 no deberia haberse cargado"
     If Not PageTable(IO_VPAGE).Present Or FrameOwner(IO_FRAME) <> IO_VPAGE Then fails = fails + 1: Debug.Print "  FAIL  5: la pagina 15 fue desalojada"
 
-    ' ===== 6) Pagina fuera de rango =====
+    ' ===== 6) Page out of range =====
     On Error Resume Next
     HandlePageFault 16
     If Err.Number <> vbObjectError + 533 Then fails = fails + 1: Debug.Print "  FAIL  6: HandlePageFault(16) no dio error"
     Err.Clear
     On Error GoTo 0
 
-    ' Limpieza: deja la maquina como estaba
+    ' Cleanup: leaves the machine as it was
     PreparePFTest oldPolicy
     ClearVMem
     ReplacePolicy = oldPolicy
