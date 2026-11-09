@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="gradKaren" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FBBF24"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="56" fill="#1E293B" stroke="url(#gradKaren)" stroke-width="4"/>
+  <circle cx="60" cy="46" r="22" fill="#F1EFE8"/>
+  <path d="M26 100 C26 78, 42 70, 60 70 C78 70, 94 78, 94 100 Z" fill="#F1EFE8"/>
+  <circle cx="60" cy="46" r="16" fill="#FBBF24" opacity="0.2"/>
+  <text x="60" y="52" font-family="'Segoe UI', sans-serif" font-size="20" font-weight="900" fill="#0F172A" text-anchor="middle">K</text>
+</svg>

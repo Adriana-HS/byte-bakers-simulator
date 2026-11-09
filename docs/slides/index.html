@@ -519,21 +519,30 @@
             Buses Tri-Estado · Memoria Virtual Paginada (512 B) · Caché Multinivel L1/L2 · Periféricos Mapeados (Teclado y LCD 8x1)
           </p>
 
-          <div style="display: flex; justify-content: center; gap: 1.5rem;">
-            <div class="card" style="padding: 1rem 1.4rem; text-align: left; border-top: 4px solid var(--clr-active);">
-              <div style="font-size: 0.75rem; color: var(--clr-active); font-weight: 800;">BLOQUE 1 (0:00 - 6:40)</div>
-              <div style="font-weight: 800; font-size: 1.15rem;">Adriana</div>
-              <div style="font-size: 0.85rem; color: var(--clr-muted);">CPU, Buses & Palabra de Control</div>
+          <div style="display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap;">
+            <div class="card" style="padding: 1rem 1.4rem; text-align: left; border-top: 4px solid var(--clr-active); display: flex; align-items: center; gap: 1rem; min-width: 250px;">
+              <img src="img/adriana.svg" alt="Adriana" style="width: 56px; height: 56px; border-radius: 50%; border: 2.5px solid var(--clr-active); object-fit: cover; flex-shrink: 0;" onerror="this.src='img/adriana.svg'"/>
+              <div>
+                <div style="font-size: 0.75rem; color: var(--clr-active); font-weight: 800;">BLOQUE 1 (0:00 - 6:40)</div>
+                <div style="font-weight: 800; font-size: 1.15rem;">Adriana</div>
+                <div style="font-size: 0.85rem; color: var(--clr-muted);">CPU, Buses & Control</div>
+              </div>
             </div>
-            <div class="card" style="padding: 1rem 1.4rem; text-align: left; border-top: 4px solid var(--clr-load);">
-              <div style="font-size: 0.75rem; color: var(--clr-load); font-weight: 800;">BLOQUE 2 (6:40 - 13:20)</div>
-              <div style="font-weight: 800; font-size: 1.15rem;">Karen</div>
-              <div style="font-size: 0.85rem; color: var(--clr-muted);">Memoria Virtual & Caché L1/L2</div>
+            <div class="card" style="padding: 1rem 1.4rem; text-align: left; border-top: 4px solid var(--clr-load); display: flex; align-items: center; gap: 1rem; min-width: 250px;">
+              <img src="img/karen.svg" alt="Karen" style="width: 56px; height: 56px; border-radius: 50%; border: 2.5px solid var(--clr-load); object-fit: cover; flex-shrink: 0;" onerror="this.src='img/karen.svg'"/>
+              <div>
+                <div style="font-size: 0.75rem; color: var(--clr-load); font-weight: 800;">BLOQUE 2 (6:40 - 13:20)</div>
+                <div style="font-weight: 800; font-size: 1.15rem;">Karen</div>
+                <div style="font-size: 0.85rem; color: var(--clr-muted);">Memoria & Caché L1/L2</div>
+              </div>
             </div>
-            <div class="card" style="padding: 1rem 1.4rem; text-align: left; border-top: 4px solid var(--clr-hit);">
-              <div style="font-size: 0.75rem; color: var(--clr-hit); font-weight: 800;">BLOQUE 3 (13:20 - 20:00)</div>
-              <div style="font-weight: 800; font-size: 1.15rem;">Misael</div>
-              <div style="font-size: 0.85rem; color: var(--clr-muted);">E/S, Software & Metodología</div>
+            <div class="card" style="padding: 1rem 1.4rem; text-align: left; border-top: 4px solid var(--clr-hit); display: flex; align-items: center; gap: 1rem; min-width: 250px;">
+              <img src="img/misael.svg" alt="Misael" style="width: 56px; height: 56px; border-radius: 50%; border: 2.5px solid var(--clr-hit); object-fit: cover; flex-shrink: 0;" onerror="this.src='img/misael.svg'"/>
+              <div>
+                <div style="font-size: 0.75rem; color: var(--clr-hit); font-weight: 800;">BLOQUE 3 (13:20 - 20:00)</div>
+                <div style="font-weight: 800; font-size: 1.15rem;">Misael</div>
+                <div style="font-size: 0.85rem; color: var(--clr-muted);">E/S, Software & Metodología</div>
+              </div>
             </div>
           </div>
 
@@ -553,7 +562,10 @@
 
         <div class="grid-3">
           <div class="card" style="border-left: 4px solid var(--clr-active);">
-            <div class="card-title" style="color: var(--clr-active);">1. Adriana (00:00 - 06:40)</div>
+            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+              <img src="img/adriana.svg" alt="Adriana" style="width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--clr-active); object-fit: cover;" onerror="this.src='img/adriana.svg'"/>
+              <div class="card-title" style="color: var(--clr-active); margin: 0;">1. Adriana (00:00 - 06:40)</div>
+            </div>
             <div style="display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.9rem;">
               <div>• CPU 8 bits: AX, BX, CX, DX y ALU</div>
               <div>• Buses separados: 9b interno vs 8b externo</div>
@@ -567,7 +579,10 @@
           </div>
 
           <div class="card" style="border-left: 4px solid var(--clr-load);">
-            <div class="card-title" style="color: var(--clr-load);">2. Karen (06:40 - 13:20)</div>
+            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+              <img src="img/karen.svg" alt="Karen" style="width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--clr-load); object-fit: cover;" onerror="this.src='img/karen.svg'"/>
+              <div class="card-title" style="color: var(--clr-load); margin: 0;">2. Karen (06:40 - 13:20)</div>
+            </div>
             <div style="display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.9rem;">
               <div>• VMem 512 B swap sobre 256 B RAM</div>
               <div>• Traducción matemática VPN/offset → PFN</div>
@@ -581,7 +596,10 @@
           </div>
 
           <div class="card" style="border-left: 4px solid var(--clr-hit);">
-            <div class="card-title" style="color: var(--clr-hit);">3. Misael (13:20 - 20:00)</div>
+            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+              <img src="img/misael.svg" alt="Misael" style="width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--clr-hit); object-fit: cover;" onerror="this.src='img/misael.svg'"/>
+              <div class="card-title" style="color: var(--clr-hit); margin: 0;">3. Misael (13:20 - 20:00)</div>
+            </div>
             <div style="display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.9rem;">
               <div>• Teclado con cola circular de 8 bytes (KBD_COUNT)</div>
               <div>• Pantalla LCD 8x1 vinculada a video buffer</div>
