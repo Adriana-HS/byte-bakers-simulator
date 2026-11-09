@@ -18,16 +18,6 @@ Private curReg As Integer
 Private curOperand As Integer
 Private logRow As Long
 Private lastDesc As String
-Private lastFaults As Long
-Private lastL1IH As Long
-Private lastL1IM As Long
-Private lastL1DH As Long
-Private lastL1DM As Long
-Private lastL2H As Long
-Private lastL2M As Long
-Private Const LOG_COLS As Integer = 28
-Private Const LOG_FIRST As Long = 4
-Private Const LOG_BLANK_TO As Long = 24
 
 ' =====================================================================
 ' Public entry points (called from modDashboard buttons)
@@ -106,11 +96,7 @@ Public Function CurrentMicroText() As String
             Case 6: CurrentMicroText = "F6  MDR -> IR, PC+1"
         End Select
     ElseIf MicroStep = 7 Then
-        If Len(lastDesc) > 0 Then
-            CurrentMicroText = "DEC  " & lastDesc
-        Else
-            CurrentMicroText = "DECODE"
-        End If
+        CurrentMicroText = "DECODE"
     ElseIf MicroStep > 7 Then
         CurrentMicroText = "E" & (MicroStep - 7) & "  " & lastDesc
     Else
@@ -172,9 +158,9 @@ Private Function DoExecute(ByVal t As Integer) As Boolean
             DoExecute = True
 
         Case OP_HLT
+            Emit 0, "HLT"
             CPU.Halted = True
             RunFlag = False
-            Emit 0, "HLT"
             DoExecute = True
 
         Case OP_MOV_RI
@@ -334,134 +320,32 @@ Private Function MnemonicOf(ByVal op As Integer) As String
 End Function
 
 ' =====================================================================
-' Log sheet - one boxed row per micro-step.
-' Title (row 1) is rewritten on every step: step, phase, micro-op, status.
+' Log sheet
 ' =====================================================================
-Public Sub ClearLogSheet()
+Private Sub ClearLogSheet()
     Dim ws As Worksheet
-    Dim titles As Variant
-    Dim i As Integer
-    Dim r As Long
     On Error Resume Next
     Set ws = ThisWorkbook.Worksheets(SH_LOG)
     If ws Is Nothing Then
         Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count))
         ws.Name = SH_LOG
     End If
-    On Error GoTo 0
-    On Error Resume Next
-    ws.Range("A1:AB400").UnMerge
-    On Error GoTo 0
-    ws.Range("A1:AB400").Clear
-    ws.Activate
-    ActiveWindow.DisplayGridlines = False
-    ActiveWindow.FreezePanes = False
-    On Error Resume Next
-    ws.Tab.Color = CLR_ACTIVE
-    On Error GoTo 0
-
-    ws.Range("A1:AB1").Merge
-    ws.Range("A1").Value = "STEP 0    IDLE    waiting    --"
-    ws.Range("A1").Font.Name = "Segoe UI"
-    ws.Range("A1").Font.Size = 18
-    ws.Range("A1").Font.Bold = True
-    ws.Range("A1").Font.Color = CLR_TEXT
-    ws.Range("A1").Interior.Color = CLR_BG
-    ws.Range("A1").HorizontalAlignment = xlLeft
-    ws.Range("A1").IndentLevel = 1
-    ws.Rows(1).RowHeight = 32
-
-    LogGroup ws, "A2:E2", "STEP"
-    LogGroup ws, "F2:K2", "CPU"
-    LogGroup ws, "L2:O2", "REGISTERS"
-    LogGroup ws, "P2:R2", "FLAGS"
-    LogGroup ws, "S2:X2", "BUSES"
-    LogGroup ws, "Y2:AB2", "CACHE"
-    ws.Rows(2).RowHeight = 18
-
-    titles = Array("CLK", "Phase", "Micro", "Status", "What happened", _
-        "PC", "MAR", "MDR", "IR", "TA", "TB", _
-        "AX", "BX", "CX", "DX", _
-        "ZF", "CF", "SF", _
-        "Int addr", "Ext addr", "Data", "Who", "CW", "Signals", _
-        "L1I", "L1D", "L2", "Faults")
-    For i = 0 To LOG_COLS - 1
-        ws.Cells(3, i + 1).Value = titles(i)
-    Next i
-    With ws.Range("A3:AB3")
+    ws.Cells.Clear
+    ws.Range("A1:K1").Value = Array("CLK", "Phase", "PC", "AX", "BX", "CX", "DX", "Flags", "CTRL", "CW hex", "Transfer")
+    With ws.Range("A1:K1")
         .Font.Name = "Segoe UI"
-        .Font.Size = 10
         .Font.Bold = True
         .Font.Color = CLR_TEXT
         .Interior.Color = CLR_BG
-        .HorizontalAlignment = xlCenter
     End With
-    ws.Rows(3).RowHeight = 20
-    LogBox ws.Range("A1:AB3")
-
-    ws.Columns("A").ColumnWidth = 7
-    ws.Columns("B").ColumnWidth = 11
-    ws.Columns("C").ColumnWidth = 7
-    ws.Columns("D").ColumnWidth = 9
-    ws.Columns("E").ColumnWidth = 26
-    ws.Columns("F:R").ColumnWidth = 7
-    ws.Columns("S:U").ColumnWidth = 11
-    ws.Columns("V").ColumnWidth = 10
-    ws.Columns("W").ColumnWidth = 12
-    ws.Columns("X").ColumnWidth = 34
-    ws.Columns("Y:AA").ColumnWidth = 8
-    ws.Range("Y4:AA400").NumberFormat = "@"
-    ws.Columns("AB").ColumnWidth = 9
-
-    For r = LOG_FIRST To LOG_BLANK_TO
-        PaintBlankLogRow ws, r
-    Next r
-    LogBox ws.Range("A4:AB" & LOG_BLANK_TO)
-
-    ws.Range("A4").Select
-    ActiveWindow.FreezePanes = True
-    lastFaults = 0
-    lastL1IH = 0
-    lastL1IM = 0
-    lastL1DH = 0
-    lastL1DM = 0
-    lastL2H = 0
-    lastL2M = 0
-    logRow = LOG_FIRST
-End Sub
-
-Private Sub PaintBlankLogRow(ByVal ws As Worksheet, ByVal r As Long)
-    Dim row As Range
-    Set row = ws.Range(ws.Cells(r, 1), ws.Cells(r, LOG_COLS))
-    row.Font.Name = "Consolas"
-    row.Font.Size = 10
-    row.Font.Color = CLR_BG
-    row.Font.Bold = False
-    If r Mod 2 = 0 Then
-        row.Interior.Color = CLR_TEXT
-    Else
-        row.Interior.Color = CLR_HIGHZ
-    End If
-    ws.Rows(r).RowHeight = 18
-End Sub
-
-Private Sub LogGroup(ByVal ws As Worksheet, ByVal addr As String, ByVal caption As String)
-    ws.Range(addr).Merge
-    ws.Range(addr).Value = caption
-    ws.Range(addr).Font.Name = "Segoe UI"
-    ws.Range(addr).Font.Size = 9
-    ws.Range(addr).Font.Bold = True
-    ws.Range(addr).Font.Color = CLR_BG
-    ws.Range(addr).Interior.Color = CLR_TEXT
-    ws.Range(addr).HorizontalAlignment = xlLeft
-End Sub
-
-Private Sub LogBox(ByVal rng As Range)
-    With rng.Borders
-        .LineStyle = xlContinuous
-        .Weight = xlMedium
-        .Color = CLR_BG
-    End With
+    ws.Range("A2:K200").Font.Name = "Consolas"
+    ws.Range("A2:K200").Font.Size = 10
+    ws.Columns("A:K").ColumnWidth = 12
+    ws.Columns("I").ColumnWidth = 28
+    ws.Columns("K").ColumnWidth = 22
+    ws.Rows(1).RowHeight = 20
+    logRow = 2
+    On Error GoTo 0
 End Sub
 
 Private Function PhaseName() As String
@@ -469,10 +353,8 @@ Private Function PhaseName() As String
         PhaseName = "FETCH"
     ElseIf MicroStep = 7 Then
         PhaseName = "DECODE"
-    ElseIf MicroStep > 7 Then
-        PhaseName = "EXECUTE"
     Else
-        PhaseName = "IDLE"
+        PhaseName = "EXECUTE"
     End If
 End Function
 
@@ -480,186 +362,28 @@ Private Function FlagText() As String
     FlagText = "Z" & IIf(CPU.ZF, "1", "0") & " C" & IIf(CPU.CF, "1", "0") & " S" & IIf(CPU.SF, "1", "0")
 End Function
 
-Private Function BusShown(ByVal v As Integer) As String
-    If v = HIGH_Z Then
-        BusShown = "HiZ"
-    Else
-        BusShown = Right$("000" & Hex$(v And &H1FF), 3) & "h"
-    End If
-End Function
-
-Private Function StepStatus() As String
-    If Stats.PageFaults > lastFaults Then
-        StepStatus = "FAULT"
-    ElseIf CPU.Halted Then
-        StepStatus = "HALT"
-    Else
-        StepStatus = "OK"
-    End If
-End Function
-
-Private Function WhoDrives() As String
-    If Len(Bus.DataDriver) > 0 Then
-        WhoDrives = Bus.DataDriver
-    ElseIf Len(Bus.AddrDriver) > 0 Then
-        WhoDrives = Bus.AddrDriver
-    Else
-        WhoDrives = "-"
-    End If
-End Function
-
-Private Function PairCount(ByVal hits As Long, ByVal misses As Long) As String
-    PairCount = CStr(hits) & "/" & CStr(misses)
-End Function
-
 Private Sub LogStep(ByVal cw As Long, ByVal description As String)
     Dim ws As Worksheet
-    Dim row As Range
-    Dim phase As String
-    Dim status As String
     On Error Resume Next
     Set ws = ThisWorkbook.Worksheets(SH_LOG)
     If ws Is Nothing Then ClearLogSheet: Set ws = ThisWorkbook.Worksheets(SH_LOG)
-    On Error GoTo 0
-    If logRow < LOG_FIRST Then logRow = LOG_FIRST
-    If logRow > LOG_BLANK_TO Then PaintBlankLogRow ws, logRow
-    phase = PhaseName()
-    status = StepStatus()
-    ws.Range("A1").Value = "STEP " & Clock & "    " & phase & "    " & CurrentMicroText() & "    " & status
-
-    Set row = ws.Range(ws.Cells(logRow, 1), ws.Cells(logRow, LOG_COLS))
-    row.Font.Name = "Consolas"
-    row.Font.Size = 10
-    row.Font.Color = CLR_BG
-    row.Font.Bold = False
-    row.HorizontalAlignment = xlCenter
-    If logRow Mod 2 = 0 Then
-        row.Interior.Color = CLR_TEXT
-    Else
-        row.Interior.Color = CLR_HIGHZ
-    End If
-    ws.Cells(logRow, 5).HorizontalAlignment = xlLeft
-
+    If logRow < 2 Then logRow = 2
     ws.Cells(logRow, 1).Value = Clock
-    ws.Cells(logRow, 2).Value = phase
-    ws.Cells(logRow, 3).Value = MicroTag()
-    ws.Cells(logRow, 4).Value = status
-    ws.Cells(logRow, 5).Value = description
-    ws.Cells(logRow, 6).Value = CPU.PC
-    ws.Cells(logRow, 7).Value = CPU.MAR
-    ws.Cells(logRow, 8).Value = CPU.MDR
-    ws.Cells(logRow, 9).Value = Right$("0000" & Hex$(CPU.IR And &HFFFF&), 4) & "h"
-    ws.Cells(logRow, 10).Value = CPU.TA
-    ws.Cells(logRow, 11).Value = CPU.TB
-    ws.Cells(logRow, 12).Value = CPU.R(R_AX)
-    ws.Cells(logRow, 13).Value = CPU.R(R_BX)
-    ws.Cells(logRow, 14).Value = CPU.R(R_CX)
-    ws.Cells(logRow, 15).Value = CPU.R(R_DX)
-    ws.Cells(logRow, 16).Value = IIf(CPU.ZF, 1, 0)
-    ws.Cells(logRow, 17).Value = IIf(CPU.CF, 1, 0)
-    ws.Cells(logRow, 18).Value = IIf(CPU.SF, 1, 0)
-    ws.Cells(logRow, 19).Value = BusShown(Bus.IntAddr)
-    ws.Cells(logRow, 20).Value = BusShown(Bus.ExtAddr)
-    ws.Cells(logRow, 21).Value = BusShown(Bus.Data)
-    ws.Cells(logRow, 22).Value = WhoDrives()
-    ws.Cells(logRow, 23).Value = "0x" & Hex$(cw)
-    ws.Cells(logRow, 24).Value = CW_ToString(cw)
-    ws.Cells(logRow, 25).NumberFormat = "@"
-    ws.Cells(logRow, 26).NumberFormat = "@"
-    ws.Cells(logRow, 27).NumberFormat = "@"
-    ws.Cells(logRow, 25).Value = PairCount(Stats.L1IHit, Stats.L1IMiss)
-    ws.Cells(logRow, 26).Value = PairCount(Stats.L1DHit, Stats.L1DMiss)
-    ws.Cells(logRow, 27).Value = PairCount(Stats.L2Hit, Stats.L2Miss)
-    ws.Cells(logRow, 28).Value = Stats.PageFaults
-
-    PaintPhaseCell ws.Cells(logRow, 2), phase
-    PaintStatusCell ws.Cells(logRow, 4), status
-    PaintFlagCell ws.Cells(logRow, 16), CPU.ZF
-    PaintFlagCell ws.Cells(logRow, 17), CPU.CF
-    PaintFlagCell ws.Cells(logRow, 18), CPU.SF
-    PaintCacheCell ws.Cells(logRow, 25), Stats.L1IHit, Stats.L1IMiss, lastL1IH, lastL1IM
-    PaintCacheCell ws.Cells(logRow, 26), Stats.L1DHit, Stats.L1DMiss, lastL1DH, lastL1DM
-    PaintCacheCell ws.Cells(logRow, 27), Stats.L2Hit, Stats.L2Miss, lastL2H, lastL2M
-    If Stats.PageFaults > lastFaults Then
-        ws.Cells(logRow, 28).Interior.Color = CLR_FAULT
-        ws.Cells(logRow, 28).Font.Color = CLR_TEXT
-        ws.Cells(logRow, 28).Font.Bold = True
-    End If
-    LogBox row
-    ws.Rows(logRow).RowHeight = 18
-
-    lastFaults = Stats.PageFaults
-    lastL1IH = Stats.L1IHit
-    lastL1IM = Stats.L1IMiss
-    lastL1DH = Stats.L1DHit
-    lastL1DM = Stats.L1DMiss
-    lastL2H = Stats.L2Hit
-    lastL2M = Stats.L2Miss
+    ws.Cells(logRow, 2).Value = PhaseName()
+    ws.Cells(logRow, 3).Value = CPU.PC
+    ws.Cells(logRow, 4).Value = CPU.R(R_AX)
+    ws.Cells(logRow, 5).Value = CPU.R(R_BX)
+    ws.Cells(logRow, 6).Value = CPU.R(R_CX)
+    ws.Cells(logRow, 7).Value = CPU.R(R_DX)
+    ws.Cells(logRow, 8).Value = FlagText()
+    ws.Cells(logRow, 9).Value = CW_ToString(cw)
+    ws.Cells(logRow, 10).Value = "0x" & Hex$(cw)
+    ws.Cells(logRow, 11).Value = description
+    If logRow Mod 2 = 0 Then ws.Range(ws.Cells(logRow, 1), ws.Cells(logRow, 11)).Interior.Color = CLR_TEXT
+    ws.Range(ws.Cells(logRow, 1), ws.Cells(logRow, 11)).Borders.LineStyle = xlContinuous
+    ws.Range(ws.Cells(logRow, 1), ws.Cells(logRow, 11)).Borders.Color = CLR_HIGHZ
     logRow = logRow + 1
-End Sub
-
-Private Function MicroTag() As String
-    If MicroStep >= 1 And MicroStep <= 6 Then
-        MicroTag = "F" & MicroStep
-    ElseIf MicroStep = 7 Then
-        MicroTag = "DEC"
-    ElseIf MicroStep > 7 Then
-        MicroTag = "E" & (MicroStep - 7)
-    Else
-        MicroTag = "-"
-    End If
-End Function
-
-Private Sub PaintPhaseCell(ByVal cell As Range, ByVal phase As String)
-    cell.Font.Bold = True
-    cell.HorizontalAlignment = xlCenter
-    If phase = "FETCH" Then
-        cell.Interior.Color = CLR_ACTIVE
-        cell.Font.Color = CLR_TEXT
-    ElseIf phase = "DECODE" Then
-        cell.Interior.Color = CLR_LOAD
-        cell.Font.Color = CLR_BG
-    ElseIf phase = "EXECUTE" Then
-        cell.Interior.Color = CLR_HIT
-        cell.Font.Color = CLR_TEXT
-    End If
-End Sub
-
-Private Sub PaintStatusCell(ByVal cell As Range, ByVal status As String)
-    cell.Font.Bold = True
-    cell.HorizontalAlignment = xlCenter
-    If status = "OK" Then
-        cell.Interior.Color = CLR_HIT
-        cell.Font.Color = CLR_TEXT
-    ElseIf status = "HALT" Then
-        cell.Interior.Color = CLR_ACTIVE
-        cell.Font.Color = CLR_TEXT
-    ElseIf status = "FAULT" Then
-        cell.Interior.Color = CLR_FAULT
-        cell.Font.Color = CLR_TEXT
-    End If
-End Sub
-
-Private Sub PaintCacheCell(ByVal cell As Range, ByVal hits As Long, ByVal misses As Long, _
-                           ByVal prevHits As Long, ByVal prevMisses As Long)
-    cell.HorizontalAlignment = xlCenter
-    If misses > prevMisses Then
-        cell.Interior.Color = CLR_MISS
-        cell.Font.Color = CLR_BG
-        cell.Font.Bold = True
-    ElseIf hits > prevHits Then
-        cell.Interior.Color = CLR_HIT
-        cell.Font.Color = CLR_TEXT
-        cell.Font.Bold = True
-    End If
-End Sub
-
-Private Sub PaintFlagCell(ByVal cell As Range, ByVal onFlag As Boolean)
-    cell.HorizontalAlignment = xlCenter
-    If onFlag Then
-        cell.Interior.Color = CLR_LOAD
-        cell.Font.Bold = True
-    End If
+    On Error GoTo 0
 End Sub
 
 ' =====================================================================
@@ -668,14 +392,6 @@ End Sub
 Public Function Test_ControlUnit() As Long
     Dim fails As Long
     Dim i As Integer
-    Dim prevScreen As Boolean
-    Dim prevEvents As Boolean
-    prevScreen = Application.ScreenUpdating
-    prevEvents = Application.EnableEvents
-    Application.ScreenUpdating = False
-    Application.EnableEvents = False
-    AnimDelay = 0
-    On Error GoTo Clean
 
     ResetMachine
     ResetControlUnit
@@ -745,18 +461,7 @@ Public Function Test_ControlUnit() As Long
         guard = guard + 1
     Loop
     fails = fails + CuCheck("JZ taken -> AX=42", GetReg(R_AX) = 42)
-    fails = fails + CuCheck("log title names the step", InStr(CStr(ThisWorkbook.Worksheets(SH_LOG).Range("A1").Value), "STEP ") = 1)
-    fails = fails + CuCheck("log title shows HALT", InStr(CStr(ThisWorkbook.Worksheets(SH_LOG).Range("A1").Value), "HALT") > 0)
-    fails = fails + CuCheck("log header is CLK", CStr(ThisWorkbook.Worksheets(SH_LOG).Range("A3").Value) = "CLK")
-    fails = fails + CuCheck("log row is boxed", ThisWorkbook.Worksheets(SH_LOG).Range("A4").Borders(xlEdgeLeft).LineStyle = xlContinuous)
 
-    GoTo Done
-Clean:
-    fails = fails + 1
-    Debug.Print "Test_ControlUnit ERROR: " & Err.Number & " " & Err.Description
-Done:
-    Application.ScreenUpdating = prevScreen
-    Application.EnableEvents = prevEvents
     Debug.Print IIf(fails = 0, "Test_ControlUnit: ALL OK", "Test_ControlUnit: " & fails & " FAIL(S)")
     Test_ControlUnit = fails
 End Function
