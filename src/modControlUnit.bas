@@ -12,6 +12,7 @@ Option Explicit
 
 Public MicroStep As Integer      ' 1..6 fetch, 7.. execute phase index+6
 Public RunFlag As Boolean
+Public InstructionIndex As Long  ' 1-based index of current assembly instruction
 
 Private curOp As Integer
 Private curReg As Integer
@@ -46,6 +47,7 @@ Public Sub StepMicro()
 
     On Error GoTo EH
     If MicroStep <= 6 Then
+        If MicroStep = 1 Then InstructionIndex = InstructionIndex + 1
         DoFetch MicroStep
         MicroStep = MicroStep + 1
         If MicroStep = 7 Then
@@ -89,6 +91,7 @@ Public Sub ResetControlUnit()
     curOperand = 0
     lastDesc = ""
     logRow = 1
+    InstructionIndex = 0
     ClearLogSheet
 End Sub
 

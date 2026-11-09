@@ -192,7 +192,7 @@ Public Sub LoadEditor()
     VMemWriteBlock 0, bytes
     ResetMachine
     ResetControlUnit
-    LogClear
+    ClearLogSheet
     DemandPaging
     RefreshAll
     ThisWorkbook.Worksheets(SH_SIM).Activate
