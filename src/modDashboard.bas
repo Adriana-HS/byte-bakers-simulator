@@ -397,7 +397,6 @@ Public Sub BtnReset()
     ResetMachine
     ResetControlUnit
     ClearLogSheet
-    LogClear
     RefreshAll
 End Sub
 
@@ -491,6 +490,7 @@ End Sub
 
 Private Function StatusText() As String
     Dim detail As String
+    Dim linePfx As String
     On Error Resume Next
     detail = CurrentMicroText()
     If Err.Number <> 0 Or Len(detail) = 0 Then
@@ -498,7 +498,12 @@ Private Function StatusText() As String
         detail = "idle"
     End If
     On Error GoTo 0
-    StatusText = PhaseWord() & "   " & detail & "    CLK " & Clock
+    If InstructionIndex > 0 Then
+        linePfx = "[Line " & InstructionIndex & "] "
+    Else
+        linePfx = ""
+    End If
+    StatusText = linePfx & PhaseWord() & "   " & detail & "    CLK " & Clock
 End Function
 
 Private Function PhaseWord() As String
