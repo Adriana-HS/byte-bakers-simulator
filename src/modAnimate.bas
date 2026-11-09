@@ -79,7 +79,11 @@ End Function
 Public Function SecondReceiver(ByVal cw As Long) As String
     Dim nm As String
     nm = NthSignal(cw, True, 2)
-    If Len(nm) > 0 Then SecondReceiver = ShapeFor(nm)
+    If Len(nm) > 0 Then
+        SecondReceiver = ShapeFor(nm)
+    ElseIf (cw And SIG_LD_LCD) <> 0 Then
+        SecondReceiver = "lcd_glass"
+    End If
 End Function
 
 Public Function BusWireOf(ByVal cw As Long) As String
@@ -164,6 +168,7 @@ Public Function Test_Animate() As Long
     fails = fails + AniCheck("OUT high-Z", _
         DriverShape(SIG_EN_AX Or SIG_IO_W Or SIG_LD_LCD) = PFX_REG & "AX" And _
         ReceiverShape(SIG_EN_AX Or SIG_IO_W Or SIG_LD_LCD) = PFX_BUF & "LCD" And _
+        SecondReceiver(SIG_EN_AX Or SIG_IO_W Or SIG_LD_LCD) = "lcd_glass" And _
         BusWireOf(SIG_EN_AX Or SIG_IO_W Or SIG_LD_LCD) = PFX_WIRE & "DATA" And _
         IoLeavesMemHighZ(SIG_EN_AX Or SIG_IO_W Or SIG_LD_LCD))
     fails = fails + AniCheck("mem read is not high-Z", Not IoLeavesMemHighZ(SIG_MEM_R Or SIG_LD_MDR))
